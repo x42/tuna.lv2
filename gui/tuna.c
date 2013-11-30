@@ -55,6 +55,10 @@ typedef struct {
 	float p_cent;
 	float p_error;
 
+	float strobe_tme;
+	float strobe_dpy;
+	float strobe_phase;
+
 } TunaUI;
 
 const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -97,8 +101,10 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	write_text_full(cr, txt,
 			ui->font[0], DAWIDTH/2, DAHEIGHT/2, 0, 2, c_wht);
 
-	cairo_rectangle (cr, 18, DAHEIGHT - 102, (DAWIDTH - 36) , 24);
-	CairoSetSouerceRGBA(c_gry);
+	rounded_rectangle (cr, 18, DAHEIGHT - 102, (DAWIDTH - 36) , 24, 4);
+	CairoSetSouerceRGBA(c_g30);
+	cairo_fill(cr);
+	rounded_rectangle (cr, 18, DAHEIGHT - 62, (DAWIDTH - 36) , 24, 4);
 	cairo_fill(cr);
 
 	if (ui->p_freq > 0) {
@@ -119,6 +125,33 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 		write_text_full(cr, " -- no signal -- ",
 				ui->font[0], DAWIDTH/2, DAHEIGHT-10, 0, 5, c_red);
 	}
+
+	cairo_set_source_rgba (cr, .5, .5, .5, .8);
+	if (ui->strobe_dpy != ui->strobe_tme) {
+		if (ui->strobe_tme > ui->strobe_dpy) {
+			float tdiff = ui->strobe_tme - ui->strobe_dpy;
+			ui->strobe_phase += tdiff * ui->p_cent * 4;
+			cairo_set_source_rgba (cr, .8, .8, .0, .8);
+		}
+		ui->strobe_dpy = ui->strobe_tme;
+	}
+
+	cairo_save(cr);
+	double dash1[] = {8.0};
+	double dash2[] = {16.0};
+
+	cairo_set_dash(cr, dash1, 1, ui->strobe_phase*2);
+	cairo_set_line_width(cr, 8.0);
+	cairo_move_to(cr, 20, DAHEIGHT-50);
+	cairo_line_to(cr, DAWIDTH-20, DAHEIGHT-50);
+	cairo_stroke (cr);
+
+	cairo_set_dash(cr, dash2, 1, ui->strobe_phase);
+	cairo_set_line_width(cr, 16.0);
+	cairo_move_to(cr, 20, DAHEIGHT-50);
+	cairo_line_to(cr, DAWIDTH-20, DAHEIGHT-50);
+	cairo_stroke (cr);
+	cairo_restore(cr);
 
 
 	return TRUE;
@@ -183,6 +216,10 @@ instantiate(
 		return NULL;
 	}
 
+	ui->strobe_dpy = 0;
+	ui->strobe_tme = 0;
+	ui->strobe_phase = 0;
+
 	*widget = NULL;
 
 	if (!strncmp(plugin_uri, MTR_URI "one", 31 + 3 )) {
@@ -244,13 +281,17 @@ port_event(LV2UI_Handle handle,
 		case TUNA_NOTE:     ui->p_note = MAX(0, MIN(11,v)); break;
 		case TUNA_CENT:     ui->p_cent = v; break;
 		case TUNA_ERROR:    ui->p_error = v; break;
+
+		case TUNA_STROBE:
+			ui->strobe_tme = v;
+			queue_draw(ui->darea);
+			break;
 		default:
-												return;
+			return;
 	}
-	queue_draw(ui->darea);
 }
 
-static const void*
+	static const void*
 extension_data(const char* uri)
 {
 	return NULL;

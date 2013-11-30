@@ -12,6 +12,7 @@ typedef enum {
 	TUNA_NOTE,
 	TUNA_CENT,
 	TUNA_ERROR,
+	TUNA_STROBE,
 } PortIndex;
 
 

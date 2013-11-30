@@ -154,6 +154,7 @@ typedef struct {
 	float* p_note;
 	float* p_cent;
 	float* p_error;
+	float* p_strobe;
 
 	/* internal state */
 	double rate;
@@ -252,6 +253,9 @@ connect_port(LV2_Handle handle,
 			break;
 		case TUNA_ERROR:
 			self->p_error = (float*)data;
+			break;
+		case TUNA_STROBE:
+			self->p_strobe = (float*)data;
 			break;
 	}
 }
@@ -526,6 +530,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 	 * NB. 20 *log10f(sqrt(x)) == 10 * log(x) */
 	*self->p_rms = (rms_signal > .0000000001f) ? 10. * log10f(rms_signal) : -100;
 	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * log10f(rms_postfilter) : -100;
+
+	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 
 #ifndef OUTPUT_POSTFILTER
 	/* forward audio */
