@@ -140,6 +140,7 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float threshold) {
 typedef enum {
 	TUNA_AIN = 0,
 	TUNA_AOUT,
+	TUNA_MODE,
 	TUNA_TUNING,
 	TUNA_RMS,
 	TUNA_FREQ_OUT,
@@ -155,6 +156,7 @@ typedef struct {
 	float* a_in;
 	float* a_out;
 
+	float* p_mode;
 	float* p_rms;
 	float* p_tuning;
 	float* p_freq_out;
@@ -238,6 +240,9 @@ connect_port(LV2_Handle handle,
 		case TUNA_RMS:
 			self->p_rms = (float*)data;
 			break;
+		case TUNA_MODE:
+			self->p_mode = (float*)data;
+			break;
 		case TUNA_TUNING:
 			self->p_tuning = (float*)data;
 			break;
@@ -265,10 +270,11 @@ run(LV2_Handle handle, uint32_t n_samples)
 	Tuna* self = (Tuna*)handle;
 
 	/* input ports */
-	float* a_in = self->a_in;
-	const float tuning = *self->p_tuning;
+	float const * const a_in = self->a_in;
+	const float  tuning = *self->p_tuning;
+	const float  mode   = *self->p_mode;
 #ifdef OUTPUT_POSTFILTER
-	float* a_out = self->a_out;
+	float * const a_out = self->a_out;
 #endif
 
 	/* localize variables */
@@ -285,7 +291,15 @@ run(LV2_Handle handle, uint32_t n_samples)
 	bool fft_ran_this_cycle = false;
 	bool fft_proc_this_cycle = false;
 
-	if (1) {
+	/* operation mode */
+	if (mode > 0 && mode < 10000) {
+		/* fixed user-specified frequency */
+		freq = mode;
+	} else if (mode <= -1 && mode >= -128) {
+		/* midi-note */
+		freq = tuning * powf(2.0, floorf(-70 - mode) / 12.f);
+	} else {
+		/* auto-detect */
 		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
 	}
 
@@ -452,6 +466,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 	self->prev_smpl = prev_smpl;
 	self->rms_signal = rms_signal;
 	self->rms_postfilter = rms_postfilter;
+
 	if (!self->dll_initialized) {
 		self->monotonic_cnt = 0;
 	} else {

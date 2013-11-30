@@ -23,6 +23,21 @@
     a lv2:ControlPort ,
       lv2:InputPort ;
     lv2:index 2 ;
+    lv2:symbol "mode" ;
+    lv2:name "Mode" ;
+    lv2:default 0.0 ;
+    lv2:minimum 0.0 ;
+    lv2:maximum 8000.0;
+    lv2:portProperty lv2:integer;
+    lv2:scalePoint [ rdfs:label "auto"; rdf:value 0 ; ] ;
+    lv2:scalePoint [ rdfs:label "A2"; rdf:value 220 ; ] ;
+    lv2:scalePoint [ rdfs:label "A4"; rdf:value 440 ; ] ;
+    lv2:scalePoint [ rdfs:label "A5"; rdf:value 880 ; ] ;
+    lv2:scalePoint [ rdfs:label "8KHz"; rdf:value 8000 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:InputPort ;
+    lv2:index 3 ;
     lv2:symbol "tuning" ;
     lv2:name "Tuning A440" ;
     lv2:default 440.0 ;
@@ -33,7 +48,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 3 ;
+    lv2:index 4 ;
     lv2:symbol "rms" ;
     lv2:name "Signal Level (RMS)" ;
     lv2:minimum -100.0;
@@ -44,7 +59,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 4 ;
+    lv2:index 5 ;
     lv2:symbol "freq_out" ;
     lv2:name "Detected Frequency" ;
     lv2:minimum 0.0;
@@ -54,7 +69,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 5 ;
+    lv2:index 6 ;
     lv2:symbol "octave" ;
     lv2:name "Detected Octave" ;
     lv2:minimum -1.0;
@@ -64,7 +79,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 6 ;
+    lv2:index 7 ;
     lv2:symbol "note" ;
     lv2:name "Detected Note" ;
     lv2:minimum 0.0;
@@ -86,7 +101,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 7 ;
+    lv2:index 8 ;
     lv2:symbol "cent" ;
     lv2:name "Cent F/Fc" ;
     lv2:minimum -50.0;
@@ -97,7 +112,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 8 ;
+    lv2:index 9 ;
     lv2:symbol "accuracy" ;
     lv2:name "Note Stability" ;
     lv2:minimum -100.0;
