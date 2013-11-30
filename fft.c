@@ -129,12 +129,13 @@ static int fftx_run(struct FFTAnalysis *ft,
 	}
 
 	ft->rboff = (ft->rboff + n_samples) % n_siz;
-	/* process at most at 30Hz */
+#if 0
 	ft->afpvf += n_samples;
-	if (ft->afpvf < ft->rate / 30) {
+	if (ft->afpvf < ft->rate / 60) {
 		return -1;
 	}
 	ft->afpvf = 0;
+#endif
 
 	/* copy samples from ringbuffer into fft-buffer */
 	const uint32_t p0s = (n_off + n_samples) % n_siz;
