@@ -37,7 +37,6 @@
 #endif
 
 
-
 /* NB. RMS calculation does not take sqrt, for optimization
  * we compare the threshold against the squared signal.
  *
@@ -49,15 +48,14 @@
  * -70dBFS = (10^(.05 * -70))^2 = 0.0000001
  * -90dBFS = (10^(.05 * -70))^2 = 0.000000001
  */
-#define RMS_SIGNAL_THRESHOLD     (0.000001f)
-#define RMS_POSTFILTER_THRESHOLD (0.000003f)
-#define FFT_PEAK_THESHOLD        (0.0000003f)
+#define RMS_SIGNAL_THRESHOLD      (0.000001f)
 
 /* use FFT signal if tracked freq & FFT-freq differ by more than */
 #define FFT_FREQ_THESHOLD_FAC (.05f)
 /* but at least .. [Hz] */
 #define FFT_FREQ_THESHOLD_MIN (5.f)
 
+//#define OUTPUT_POSTFILTER
 
 #if 0
 #define info_printf printf
@@ -74,14 +72,15 @@ void debug_printf (const char *fmt,...) {}
 #include "spectr.c"
 #include "fft.c"
 
-static float fftx_scan_overtones(struct FFTAnalysis *ft, float fundamental, float *octave) {
+static float fftx_scan_overtones(struct FFTAnalysis *ft,
+		const float threshold, float fundamental, float *octave) {
 	float freq = fundamental * (*octave);
 	float scan  = MAX(1, freq * .1f);
 	float peak_dat = 0;
 	uint32_t peak_pos = 0;
 	for (uint32_t i = MAX(1, floorf(freq-scan)); i < ceilf(freq+scan); ++i) {
 		if (
-				   ft->power[i] > FFT_PEAK_THESHOLD
+				   ft->power[i] > threshold
 				&& ft->power[i] > peak_dat
 				&& ft->power[i] > ft->power[i-1]
 				&& ft->power[i] > ft->power[i+1]
@@ -96,13 +95,13 @@ static float fftx_scan_overtones(struct FFTAnalysis *ft, float fundamental, floa
 		//printf("new fun %d %.2f @ %.1f\n", peak_pos, fundamental, (*octave));
 		(*octave) *=2;
 		if ((*octave) < 32) {
-			fundamental = fftx_scan_overtones(ft, fundamental, octave);
+			fundamental = fftx_scan_overtones(ft, threshold, fundamental, octave);
 		}
 	}
 	return fundamental;
 }
 
-static float fftx_find_note(struct FFTAnalysis *ft) {
+static float fftx_find_note(struct FFTAnalysis *ft, const float threshold) {
 	/* find lowest peak above threshold */
 	float fundamental = 0;
 	float octave = 0;
@@ -110,12 +109,12 @@ static float fftx_find_note(struct FFTAnalysis *ft) {
 	const uint32_t brkpos = ft->data_size * 4000 / ft->rate;
 	for (uint32_t i = 2; i < brkpos; ++i) {
 		if (
-				ft->power[i] > FFT_PEAK_THESHOLD
+				ft->power[i] > threshold
 				&& ft->power[i] > ft->power[i-1]
 				&& ft->power[i] > ft->power[i+1]
 			 ) {
 			float o = 2;
-			float f = fftx_scan_overtones(ft, i, &o);
+			float f = fftx_scan_overtones(ft, threshold, i, &o);
 			if (o > 4) {
 				if (ft->power[i] > peak_dat) {
 					peak_dat = ft->power[i];
@@ -268,22 +267,33 @@ run(LV2_Handle handle, uint32_t n_samples)
 	/* input ports */
 	float* a_in = self->a_in;
 	const float tuning = *self->p_tuning;
+#ifdef OUTPUT_POSTFILTER
+	float* a_out = self->a_out;
+#endif
 
 	/* localize variables */
 	float prev_smpl = self->prev_smpl;
 	float rms_signal = self->rms_signal;
 	float rms_postfilter = self->rms_postfilter;
 	const float rms_omega  = self->rms_omega;
+	float freq = self->tuna_fc;
 
 	/* initialize */
 	float    detected_freq = 0;
 	uint32_t detected_count = 0;
 
-	bool fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
+	bool fft_ran_this_cycle = false;
 	bool fft_proc_this_cycle = false;
+
+	if (1) {
+		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
+	}
 
 	/* process every sample */
 	for (uint32_t n = 0; n < n_samples; ++n) {
+#ifdef OUTPUT_POSTFILTER
+		a_out[n] = 0;
+#endif
 
 		/* 1) calculate RMS */
 		rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
@@ -298,16 +308,15 @@ run(LV2_Handle handle, uint32_t n_samples)
 		}
 
 		/* 2) detect frequency to track
-		 * use FFT to rouhly detect the area
+		 * use FFT to roughly detect the area
 		 */
-		float freq = self->tuna_fc;
 
 		/* FFT accumulates data and only returns us some
 		 * valid data once in a while.. */
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx);
+			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .003));
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
@@ -363,7 +372,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 			bandpass_setup(&self->fb, self->rate, self->tuna_fc
 					/* filter-bandwidth, a tad more than a semitone, but at least 15Hz */
 					, MAX(5, self->tuna_fc * .15)
-					, 4 /*th order butterworth */);
+					, 2 /*th order butterworth */);
 			self->filter_init = 16;
 		}
 		
@@ -375,12 +384,18 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (self->filter_init > 0) {
 			self->filter_init--;
 			rms_postfilter = 0;
+#ifdef OUTPUT_POSTFILTER
+			a_out[n] = signal * (16.0 - self->filter_init) / 16.0;
+#endif
 			continue;
 		}
+#ifdef OUTPUT_POSTFILTER
+		a_out[n] = signal;
+#endif
 
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
-		if (rms_postfilter < RMS_POSTFILTER_THRESHOLD) {
+		if (rms_postfilter < rms_signal * .02) {
 			debug_printf("signal too low after filter: %f %f\n",
 					20.*log10f(sqrt(rms_signal)),
 					20.*log10f(sqrt(rms_postfilter)));
@@ -487,10 +502,12 @@ run(LV2_Handle handle, uint32_t n_samples)
 	*self->p_rms = (rms_signal > .0000000001f) ? 10. * log10f(rms_signal) : -100;
 	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * log10f(rms_postfilter) : -100;
 
+#ifndef OUTPUT_POSTFILTER
 	/* forward audio */
 	if (self->a_in != self->a_out) {
 		memcpy(self->a_out, self->a_in, sizeof(float) * n_samples);
 	}
+#endif
 }
 
 static void
