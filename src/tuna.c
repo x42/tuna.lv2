@@ -55,8 +55,10 @@
 /* but at least .. [Hz] */
 #define FFT_FREQ_THESHOLD_MIN (5.f)
 
+/* for testing only -- output filtered signal */
 //#define OUTPUT_POSTFILTER
 
+/* debug */
 #if 0
 #define info_printf printf
 #else
@@ -68,6 +70,9 @@ void info_printf (const char *fmt,...) {}
 #else
 void debug_printf (const char *fmt,...) {}
 #endif
+
+
+/*****************************************************************************/
 
 #include "spectr.c"
 #include "fft.c"
@@ -170,6 +175,7 @@ typedef struct {
 	struct FilterBank fb;
 	float tuna_fc; // center freq of expected note
 	uint32_t filter_init;
+	bool initialize;
 
 	/* discriminator */
 	float prev_smpl;
@@ -211,11 +217,12 @@ instantiate(
 	self->prev_smpl = 0;
 	self->rms_signal = 0;
 	self->rms_postfilter = 0;
-	self->rms_omega = 1.0f - expf(-2.0 * M_PI * 20.0 / rate);
+	self->rms_omega = 1.0f - expf(-2.0 * M_PI * 15.0 / rate);
 	self->dll_initialized = false;
 	self->fft_initialized = false;
 	self->fft_note = 0;
 	self->fft_note_count = 0;
+	self->initialize = true;
 
 	self->fftx = (struct FFTAnalysis*) calloc(1, sizeof(struct FFTAnalysis));
 	ft_init(self->fftx, MAX(8192, rate / 5), rate);
@@ -269,6 +276,22 @@ run(LV2_Handle handle, uint32_t n_samples)
 {
 	Tuna* self = (Tuna*)handle;
 
+	/* first time around.
+	 *
+	 * this plugin does not always set ports every run()
+	 * so we better initialize them.
+	 *
+	 * (liblilv does it according to .ttl,too * but better safe than sorry)
+	 * */
+	if (self->initialize) {
+		self->initialize  = false;
+		*self->p_freq_out = 0;
+		*self->p_octave   = 0;
+		*self->p_note     = 0;
+		*self->p_cent     = -100;
+		*self->p_error    = -100;
+	}
+
 	/* input ports */
 	float const * const a_in = self->a_in;
 	const float  tuning = *self->p_tuning;
@@ -284,10 +307,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 	const float rms_omega  = self->rms_omega;
 	float freq = self->tuna_fc;
 
-	/* initialize */
+	/* initialize local vars */
 	float    detected_freq = 0;
 	uint32_t detected_count = 0;
-
 	bool fft_ran_this_cycle = false;
 	bool fft_proc_this_cycle = false;
 
@@ -305,9 +327,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 	/* process every sample */
 	for (uint32_t n = 0; n < n_samples; ++n) {
-#ifdef OUTPUT_POSTFILTER
-		a_out[n] = 0;
-#endif
 
 		/* 1) calculate RMS */
 		rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
@@ -318,6 +337,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 			self->fft_initialized = false;
 			self->fft_note_count = 0;
 			prev_smpl = 0;
+#ifdef OUTPUT_POSTFILTER
+		a_out[n] = 0;
+#endif
 			continue;
 		}
 
@@ -368,6 +390,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (freq < 20 || freq > 10000 ) {
 			self->dll_initialized = false;
 			prev_smpl = 0;
+#ifdef OUTPUT_POSTFILTER
+		a_out[n] = 0;
+#endif
 			continue;
 		}
 
@@ -377,7 +402,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 			info_printf("set filter: %.2fHz\n", freq);
 			
 			/* calculate DLL coefficients */
-			const double omega = 4.0 * M_PI * self->tuna_fc / self->rate;
+			const double omega = ((self->tuna_fc < 50) ? 6.0 : 4.0) * M_PI * self->tuna_fc / self->rate;
 			self->dll_b = 1.4142135623730950488 * omega; // sqrt(2)
 			self->dll_c = omega * omega;
 			self->dll_initialized = false;
@@ -385,7 +410,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 			/* re-initialize filter */
 			bandpass_setup(&self->fb, self->rate, self->tuna_fc
 					/* filter-bandwidth, a tad more than a semitone, but at least 15Hz */
-					, MAX(5, self->tuna_fc * .15)
+					, MAX(8, self->tuna_fc * .15)
 					, 2 /*th order butterworth */);
 			self->filter_init = 16;
 		}
@@ -409,7 +434,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
-		if (rms_postfilter < rms_signal * .02) {
+		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .01 : .02)) {
 			debug_printf("signal too low after filter: %f %f\n",
 					20.*log10f(sqrt(rms_signal)),
 					20.*log10f(sqrt(rms_postfilter)));
