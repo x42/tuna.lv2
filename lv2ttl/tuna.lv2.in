@@ -1,0 +1,107 @@
+
+
+@LV2NAME@:one@URI_SUFFIX@
+  a lv2:Plugin, doap:Project, lv2:AnalyserPlugin;
+  doap:license <http://usefulinc.com/doap/licenses/gpl> ;
+  doap:maintainer <http://gareus.org/rgareus#me> ;
+  doap:name "Instrument Tuner@NAME_SUFFIX@";
+  lv2:optionalFeature lv2:hardRTCapable ;
+  lv2:port
+  [
+    a lv2:AudioPort ,
+      lv2:InputPort ;
+    lv2:index 0 ;
+    lv2:symbol "in" ;
+    lv2:name "Audio Input" ;
+  ] , [
+    a lv2:AudioPort ,
+      lv2:OutputPort ;
+    lv2:index 1 ;
+    lv2:symbol "out" ;
+    lv2:name "Audio output" ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:InputPort ;
+    lv2:index 2 ;
+    lv2:symbol "tuning" ;
+    lv2:name "Tuning A440"
+    lv2:default 440.0 ;
+    lv2:minimum 220.0 ;
+    lv2:maximum 880.0;
+		units:unit units:hz;
+    lv2:scalePoint [ rdfs:label "standard"; rdf:value 440.0 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 3 ;
+    lv2:symbol "rms" ;
+    lv2:name "Signal Level (RMS)" ;
+    lv2:minimum -100.0;
+    lv2:maximum -0.0;
+		units:unit units:db;
+    #lv2:portProperty pprop:logarithmic;
+    lv2:scalePoint [ rdfs:label "detection threshold"; rdf:value -45.0 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 4 ;
+    lv2:symbol "freq_out" ;
+    lv2:name "Detected Frequency" ;
+    lv2:minimum 0.0;
+    lv2:maximum 10000.0;
+		units:unit units:hz;
+    lv2:scalePoint [ rdfs:label "no signal"; rdf:value 0.0 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 5 ;
+    lv2:symbol "octave" ;
+    lv2:name "Detected Octave" ;
+    lv2:minimum -1.0;
+    lv2:maximum 10.0;
+    lv2:portProperty lv2:integer;
+		units:unit units:oct;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 6 ;
+    lv2:symbol "note" ;
+    lv2:name "Detected Note" ;
+    lv2:minimum 0.0;
+    lv2:maximum 12.0;
+		units:unit units:semitone12TET;
+    lv2:portProperty lv2:integer;
+    lv2:scalePoint [ rdfs:label "C";  rdf:value  0.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "C#"; rdf:value  1.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "D";  rdf:value  2.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "D#"; rdf:value  3.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "E";  rdf:value  4.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "F";  rdf:value  5.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "F#"; rdf:value  6.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "G";  rdf:value  7.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "G#"; rdf:value  8.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "A";  rdf:value  9.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "A#"; rdf:value 10.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "B";  rdf:value 11.0 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 7 ;
+    lv2:symbol "cent" ;
+    lv2:name "Cent F/Fc" ;
+    lv2:minimum -50.0;
+    lv2:maximum 50.0;
+    lv2:scalePoint [ rdfs:label "accurate"; rdf:value 0.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "-1/4 semitone"; rdf:value -25 ; ] ;
+    lv2:scalePoint [ rdfs:label "+1/4 semitone"; rdf:value 25 ; ] ;
+  ] , [
+    a lv2:ControlPort ,
+      lv2:OutputPort ;
+    lv2:index 8 ;
+    lv2:symbol "accuracy" ;
+    lv2:name "Note Stability" ;
+    lv2:minimum -100.0;
+    lv2:maximum 100.0;
+    lv2:scalePoint [ rdfs:label "accurate"; rdf:value 0.0 ; ] ;
+  ]
+  .

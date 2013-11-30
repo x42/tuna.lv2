@@ -1,0 +1,4 @@
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix @LV2NAME@: <http://gareus.org/oss/lv2/@LV2NAME@#> .
+
