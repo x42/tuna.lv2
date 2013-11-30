@@ -19,6 +19,7 @@ LV2NAME=tuna
 LV2GUI=tunaUI_gl
 LV2GTK=tunaUI_gtk
 
+tuna_VERSION?=$(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
 #########
 
 LV2UIREQ=
@@ -62,12 +63,12 @@ endif
 
 targets=$(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
-#ifneq ($(BUILDOPENGL), no)
-#targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
-#endif
-#ifneq ($(BUILDGTK), no)
-#targets+=$(BUILDDIR)$(LV2GTK)$(LIB_EXT)
-#endif
+ifneq ($(BUILDOPENGL), no)
+targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
+endif
+ifneq ($(BUILDGTK), no)
+targets+=$(BUILDDIR)$(LV2GTK)$(LIB_EXT)
+endif
 
 ###############################################################################
 # check for build-dependencies
@@ -88,16 +89,16 @@ ifeq ($(shell pkg-config --exists glib-2.0 gtk+-2.0 pango cairo $(PKG_LIBS) || e
   $(error "This plugin requires cairo, pango, openGL, glib-2.0 and gtk+-2.0")
 endif
 
-#ifneq ($(MAKECMDGOALS), submodules)
-#  ifeq ($(wildcard $(RW)robtk.mk),)
-#    $(warning This plugin needs https://github.com/x42/robtk)
-#    $(info set the RW environment variale to the location of the robtk headers)
-#    ifeq ($(wildcard .git),.git)
-#      $(info or run 'make submodules' to initialize robtk as git submodule)
-#    endif
-#    $(error robtk not found)
-#  endif
-#endif
+ifneq ($(MAKECMDGOALS), submodules)
+  ifeq ($(wildcard $(RW)robtk.mk),)
+    $(warning This plugin needs https://github.com/x42/robtk)
+    $(info set the RW environment variale to the location of the robtk headers)
+    ifeq ($(wildcard .git),.git)
+      $(info or run 'make submodules' to initialize robtk as git submodule)
+    endif
+    $(error robtk not found)
+  endif
+endif
 
 # check for LV2 idle thread
 ifeq ($(shell pkg-config --atleast-version=1.4.2 lv2 && echo yes), yes)
@@ -107,17 +108,17 @@ ifeq ($(shell pkg-config --atleast-version=1.4.2 lv2 && echo yes), yes)
 endif
 
 # add library dependent flags and libs
-override CFLAGS +=-fPIC $(OPTIMIZATIONS)
+override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DTUNAVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
 
 LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
 LOADLIBES=`pkg-config --libs fftw3f` -lm
 
-GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango fftw3f`
-GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango fftw3f`
+GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
+GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
 
-GLUICFLAGS+=`pkg-config --cflags cairo pango fftw3f`
-GLUILIBS+=`pkg-config --libs cairo pango pangocairo fftw3f $(PKG_LIBS)`
+GLUICFLAGS+=`pkg-config --cflags cairo pango`
+GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)`
 
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
@@ -143,23 +144,46 @@ submodule_check:
 submodules:
 	-test -d .git -a .gitmodules -a -f Makefile.git && $(MAKE) -f Makefile.git submodules
 
-all: $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets)
+all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets)
 
-$(BUILDDIR)manifest.ttl: lv2ttl/manifest.ttl.in Makefile
+$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
 	    lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
+ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
-	    lv2ttl/manifest.lv2.in >> $(BUILDDIR)manifest.ttl
+	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
+	    lv2ttl/manifest.gl.ttl.in >> $(BUILDDIR)manifest.ttl
+endif
+ifneq ($(BUILDGTK), no)
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
+	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@LV2GTK@/$(LV2GTK)/g" \
+	    lv2ttl/manifest.gtk.ttl.in >> $(BUILDDIR)manifest.ttl
+endif
 
-$(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.in Makefile
+$(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in lv2ttl/$(LV2NAME).gui.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
 	    lv2ttl/$(LV2NAME).ttl.in > $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g" \
-	  lv2ttl/$(LV2NAME).lv2.in >> $(BUILDDIR)$(LV2NAME).ttl
+ifneq ($(BUILDGTK), no)
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gtk/;s/@UI_TYPE@/ui:GtkUI/;s/@UI_REQ@//;s/@URI_SUFFIX@/_gtk/g" \
+	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+endif
+ifneq ($(BUILDOPENGL), no)
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gl/;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;s/@URI_SUFFIX@//g" \
+	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UI@/ui_gl/g" \
+	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+endif
+ifneq ($(BUILDGTK), no)
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ GTK/g;s/@UI@/ui_gtk/g" \
+	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+endif
 
-$(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c
+
+$(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 	@mkdir -p $(BUILDDIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/tuna.c \
@@ -167,8 +191,8 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c
 
 -include $(RW)robtk.mk
 
-$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/tuna.c
-$(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/tuna.c
+$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/tuna.c src/tuna.h
+$(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/tuna.c src/tuna.h
 
 ###############################################################################
 # install/uninstall/clean target definitions

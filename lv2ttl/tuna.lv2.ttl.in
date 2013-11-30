@@ -6,6 +6,7 @@
   doap:maintainer <http://gareus.org/rgareus#me> ;
   doap:name "Instrument Tuner@NAME_SUFFIX@";
   lv2:optionalFeature lv2:hardRTCapable ;
+	ui:ui @LV2NAME@:@UI@ ;
   lv2:port
   [
     a lv2:AudioPort ,

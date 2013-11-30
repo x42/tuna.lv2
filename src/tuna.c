@@ -74,6 +74,7 @@ void debug_printf (const char *fmt,...) {}
 
 /*****************************************************************************/
 
+#include "tuna.h"
 #include "spectr.c"
 #include "fft.c"
 
@@ -139,22 +140,6 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float threshold) {
 /******************************************************************************
  * LV2 routines
  */
-
-#define TUNA_URI "http://gareus.org/oss/lv2/tuna#one"
-
-typedef enum {
-	TUNA_AIN = 0,
-	TUNA_AOUT,
-	TUNA_MODE,
-	TUNA_TUNING,
-	TUNA_RMS,
-	TUNA_FREQ_OUT,
-	TUNA_OCTAVE,
-	TUNA_NOTE,
-	TUNA_CENT,
-	TUNA_ERROR,
-} PortIndex;
-
 
 typedef struct {
 	/* LV2 ports */
@@ -570,7 +555,7 @@ extension_data(const char* uri)
 }
 
 static const LV2_Descriptor descriptor = {
-	TUNA_URI,
+	TUNA_URI "one",
 	instantiate,
 	connect_port,
 	NULL,

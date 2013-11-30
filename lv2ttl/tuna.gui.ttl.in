@@ -1,0 +1,6 @@
+
+@LV2NAME@:ui@UI_URI_SUFFIX@
+	a @UI_TYPE@ ;
+	lv2:requiredFeature urid:map ;
+	@UI_REQ@
+	.

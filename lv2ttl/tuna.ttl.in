@@ -3,12 +3,12 @@
 @prefix foaf:  <http://xmlns.com/foaf/0.1/> .
 @prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
 @prefix units: <http://lv2plug.in/ns/extensions/units#> .
-@prefix pprop: <http://lv2plug.in/ns/ext/port-props#> .
-@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ui:    <http://lv2plug.in/ns/extensions/ui#> .
 @prefix urid:  <http://lv2plug.in/ns/ext/urid#> .
-@prefix pg:    <http://lv2plug.in/ns/ext/port-groups#> .
+@prefix pprop: <http://lv2plug.in/ns/ext/port-props#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix kx:    <http://kxstudio.sf.net/ns/lv2ext/external-ui#> .
 @prefix @LV2NAME@: <http://gareus.org/oss/lv2/@LV2NAME@#> .
 
 <http://gareus.org/rgareus#me>
