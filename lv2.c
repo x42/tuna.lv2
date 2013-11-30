@@ -59,7 +59,7 @@
 #define FFT_FREQ_THESHOLD_MIN (5.f)
 
 
-#if 1
+#if 0
 #define info_printf printf
 #else
 void info_printf (const char *fmt,...) {}
