@@ -13,6 +13,13 @@ typedef enum {
 	TUNA_CENT,
 	TUNA_ERROR,
 	TUNA_STROBE,
-} PortIndex;
+} PortIndexTuna;
+
+
+typedef enum {
+	MIDI_AIN = 0,
+	MIDI_MOUT,
+	MIDI_TUNING,
+} PortIndexMidi;
 
 

@@ -28,6 +28,10 @@
 #include <stdbool.h>
 
 #include "lv2/lv2plug.in/ns/lv2core/lv2.h"
+#include "lv2/lv2plug.in/ns/ext/atom/atom.h"
+#include "lv2/lv2plug.in/ns/ext/atom/forge.h"
+#include "lv2/lv2plug.in/ns/ext/urid/urid.h"
+#include "lv2/lv2plug.in/ns/ext/midi/midi.h"
 
 #ifndef MIN
 #define MIN(A,B) ( (A) < (B) ? (A) : (B) )
@@ -189,6 +193,20 @@ typedef struct {
 	bool fft_initialized;
 	int fft_note;
 	int fft_note_count;
+
+	/* MIDI Out */
+	bool midi_variant;
+  LV2_URID_Map* map;
+  LV2_Atom_Forge forge;
+  LV2_Atom_Forge_Frame frame;
+  LV2_Atom_Sequence* midiout;
+	uint8_t m_key, m_vel;
+
+	uint8_t m_stat_key;
+	uint32_t m_stat_cnt;
+
+	LV2_URID atom_Sequence;
+	LV2_URID uri_midi_Event;
 } Tuna;
 
 static LV2_Handle
@@ -203,6 +221,28 @@ instantiate(
 		return NULL;
 	}
 
+	if (!strncmp(descriptor->URI, TUNA_URI "one", 31 + 3 )) {
+		self->midi_variant = false;
+	} else if (!strncmp(descriptor->URI, TUNA_URI "midi", 31 + 4 )) {
+		int i;
+		for (i=0; features[i]; ++i) {
+			if (!strcmp(features[i]->URI, LV2_URID__map)) {
+				self->map = (LV2_URID_Map*)features[i]->data;
+			}
+		}
+		if (!self->map) {
+			fprintf(stderr, "tuna.lv2 error: Host does not support urid:map\n");
+			free(self);
+			return NULL;
+		}
+		self->uri_midi_Event = self->map->map(self->map->handle, LV2_MIDI__MidiEvent);
+		self->atom_Sequence  = self->map->map(self->map->handle, LV2_ATOM__Sequence);
+		lv2_atom_forge_init(&self->forge, self->map);
+		self->midi_variant = true;
+	} else {
+		return NULL;
+	}
+
 	self->rate = rate;
 
 	self->tuna_fc = 0;
@@ -214,7 +254,7 @@ instantiate(
 	self->fft_initialized = false;
 	self->fft_note = 0;
 	self->fft_note_count = 0;
-	self->initialize = true;
+	self->initialize = !self->midi_variant;
 
 	self->fftx = (struct FFTAnalysis*) calloc(1, sizeof(struct FFTAnalysis));
 	ft_init(self->fftx, MAX(8192, rate / 5), rate);
@@ -223,13 +263,14 @@ instantiate(
 }
 
 static void
-connect_port(LV2_Handle handle,
-               uint32_t   port,
-               void*      data)
+connect_port_tuna(
+		LV2_Handle handle,
+		uint32_t   port,
+		void*      data)
 {
 	Tuna* self = (Tuna*)handle;
 
-	switch ((PortIndex)port) {
+	switch ((PortIndexTuna)port) {
 		case TUNA_AIN:
 			self->a_in  = (float*)data;
 			break;
@@ -267,6 +308,95 @@ connect_port(LV2_Handle handle,
 }
 
 static void
+connect_port_midi(
+		LV2_Handle handle,
+		uint32_t   port,
+		void*      data)
+{
+	Tuna* self = (Tuna*)handle;
+
+	switch ((PortIndexMidi)port) {
+		case MIDI_AIN:
+			self->a_in  = (float*)data;
+			break;
+		case MIDI_MOUT:
+			self->midiout = (LV2_Atom_Sequence*)data;
+			break;
+		case MIDI_TUNING:
+			self->p_tuning = (float*)data;
+			break;
+	}
+}
+
+static void midi_tx(Tuna *self, int64_t tme, uint8_t raw_midi[3]) {
+	LV2_Atom midiatom;
+	midiatom.type = self->uri_midi_Event;
+	midiatom.size = 3;
+  lv2_atom_forge_frame_time(&self->forge, tme);
+	lv2_atom_forge_raw(&self->forge, &midiatom, sizeof(LV2_Atom));
+	lv2_atom_forge_raw(&self->forge, raw_midi, 3);
+	lv2_atom_forge_pad(&self->forge, sizeof(LV2_Atom) + midiatom.size);
+}
+
+static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
+	uint8_t raw_midi[3];
+
+	if (freq < 10 || rms == 0) {
+		if (self->m_vel == 0 || self->m_key == 0) return;
+
+		// ignore the first detection
+		if (self->m_stat_key != 255) {
+			self->m_stat_key = 255;
+			self->m_stat_cnt = 1;
+			return;
+		}
+		// and a few others too.
+		if (self->m_stat_cnt < 100) {
+			self->m_stat_cnt++;
+			return;
+		}
+		raw_midi[0] = 0x80;
+		raw_midi[1] = self->m_key;
+		raw_midi[2] = self->m_vel = 0;
+		self->m_stat_key = self->m_stat_cnt = 0;
+		self->m_key = 0;
+	} else {
+		const float tuning = *self->p_tuning;
+		const int key = rintf(12.f * logf(freq / tuning) / logf(2.f) + 69.0);
+		const int vel = 127;
+
+		// ignore the first detection
+		if (self->m_stat_key != key) {
+			self->m_stat_key = key;
+			self->m_stat_cnt = 1;
+			return;
+		}
+		// and a few others too.
+		if (self->m_stat_cnt < 16) {
+			self->m_stat_cnt++;
+			return;
+		}
+
+		// TODO handle velocity (and velocity changes ?)
+		if (self->m_vel == vel && self->m_key == key) return;
+		if (self->m_vel != 0 && self->m_key != key) {
+			/* send note off */
+			raw_midi[0] = 0x80;
+			raw_midi[1] = self->m_key;
+			raw_midi[2] = 0;
+			midi_tx(self, tme, raw_midi);
+		}
+
+		raw_midi[0] = 0x90;
+		raw_midi[1] = self->m_key = key&127;
+		raw_midi[2] = self->m_vel = vel&127;
+	}
+	midi_tx(self, tme, raw_midi);
+}
+
+
+
+static void
 run(LV2_Handle handle, uint32_t n_samples)
 {
 	Tuna* self = (Tuna*)handle;
@@ -286,13 +416,18 @@ run(LV2_Handle handle, uint32_t n_samples)
 		*self->p_cent     = -100;
 		*self->p_error    = -100;
 	}
+	if (self->midi_variant) {
+		const uint32_t capacity = self->midiout->atom.size;
+		lv2_atom_forge_set_buffer(&self->forge, (uint8_t*)self->midiout, capacity);
+		lv2_atom_forge_sequence_head(&self->forge, &self->frame, 0);
+	}
 
 	/* input ports */
 	float const * const a_in = self->a_in;
 	const float  tuning = *self->p_tuning;
-	const float  mode   = *self->p_mode;
+	const float  mode   = self->midi_variant ? 0 : *self->p_mode;
 #ifdef OUTPUT_POSTFILTER
-	float * const a_out = self->a_out;
+	float * const a_out = self->midi_variant ? NULL : self->a_out;
 #endif
 
 	/* localize variables */
@@ -333,8 +468,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 			self->fft_note_count = 0;
 			prev_smpl = 0;
 #ifdef OUTPUT_POSTFILTER
-		a_out[n] = 0;
+			if (!self->midi_variant) { a_out[n] = 0; }
 #endif
+			midi_signal(self, n, 0, 0);
 			continue;
 		}
 
@@ -386,8 +522,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 			self->dll_initialized = false;
 			prev_smpl = 0;
 #ifdef OUTPUT_POSTFILTER
-		a_out[n] = 0;
+			if (!self->midi_variant) { a_out[n] = 0; }
 #endif
+			midi_signal(self, n, 0, 0);
 			continue;
 		}
 
@@ -419,12 +556,17 @@ run(LV2_Handle handle, uint32_t n_samples)
 			self->filter_init--;
 			rms_postfilter = 0;
 #ifdef OUTPUT_POSTFILTER
-			a_out[n] = signal * (16.0 - self->filter_init) / 16.0;
+			if (!self->midi_variant) {
+				a_out[n] = signal * (16.0 - self->filter_init) / 16.0;
+			}
 #endif
+			midi_signal(self, n, 0, 0);
 			continue;
 		}
 #ifdef OUTPUT_POSTFILTER
-		a_out[n] = signal;
+		if (!self->midi_variant) {
+			a_out[n] = signal;
+		}
 #endif
 
 		/* 4) reject signals outside in the band */
@@ -435,6 +577,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 					20.*log10f(sqrt(rms_postfilter)));
 			self->dll_initialized = false;
 			prev_smpl = 0;
+			midi_signal(self, n, 0, 0);
 			continue;
 		}
 
@@ -462,21 +605,21 @@ run(LV2_Handle handle, uint32_t n_samples)
 				self->dll_t1 += self->dll_b * self->dll_e0 + self->dll_e2;
 				self->dll_e2 += self->dll_c * self->dll_e0;
 
+				const float dfreq = self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
 				debug_printf("detected Freq: %.2f (error: %.2f [samples])\n",
-						self->rate / (self->dll_t1 - self->dll_t0) / 2.f,
-						self->dll_e0
-						);
+						dfreq, self->dll_e0);
 
 #if 1
 				/* calculate average of all detected values in this cycle.
 				 * this is questionable, just use last value.
 				 */
-				detected_freq += self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
+				detected_freq += dfreq;
 				detected_count++;
 #else
-				detected_freq = self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
+				detected_freq = dfreq;
 				detected_count= 1;
 #endif
+				midi_signal(self, n, dfreq, rms_signal);
 			}
 		}
 		prev_smpl = signal;
@@ -491,6 +634,11 @@ run(LV2_Handle handle, uint32_t n_samples)
 		self->monotonic_cnt = 0;
 	} else {
 		self->monotonic_cnt += n_samples;
+	}
+
+	if (self->midi_variant) {
+		//lv2_atom_forge_pop(&self->forge, &self->frame);
+		return;
 	}
 
 	/* post-processing and data-output */
@@ -566,20 +714,33 @@ extension_data(const char* uri)
 	return NULL;
 }
 
-#define mkdesc(ID, NAME) \
+#define mkdesc_tuna(ID, NAME) \
 static const LV2_Descriptor descriptor ## ID = { \
-	TUNA_URI NAME,  \
-	instantiate,    \
-	connect_port,   \
-	NULL,           \
-	run,            \
-	NULL,           \
-	cleanup,        \
-	extension_data  \
+	TUNA_URI NAME,     \
+	instantiate,       \
+	connect_port_tuna, \
+	NULL,              \
+	run,               \
+	NULL,              \
+	cleanup,           \
+	extension_data     \
 };
 
-mkdesc(0, "one")
-mkdesc(1, "one_gtk")
+#define mkdesc_midi(ID, NAME) \
+static const LV2_Descriptor descriptor ## ID = { \
+	TUNA_URI NAME,     \
+	instantiate,       \
+	connect_port_midi, \
+	NULL,              \
+	run,               \
+	NULL,              \
+	cleanup,           \
+	extension_data     \
+};
+
+mkdesc_tuna(0, "one")
+mkdesc_tuna(1, "one_gtk")
+mkdesc_midi(2, "midi")
 
 LV2_SYMBOL_EXPORT
 const LV2_Descriptor*
@@ -588,6 +749,7 @@ lv2_descriptor(uint32_t index)
 	switch (index) {
     case  0: return &descriptor0;
     case  1: return &descriptor1;
+    case  2: return &descriptor2;
     default: return NULL;
 	}
 }

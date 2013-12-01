@@ -607,9 +607,9 @@ instantiate(
 
 	*widget = NULL;
 
-	if (!strncmp(plugin_uri, MTR_URI "one", 31 + 3 )) {
+	if (!strncmp(plugin_uri, TUNA_URI "one", 31 + 3 )) {
 		; //
-	} else if (!strncmp(plugin_uri, MTR_URI "strobe", 31 + 6)) {
+	} else if (!strncmp(plugin_uri, TUNA_URI "strobe", 31 + 6)) {
 		; //
 	} else {
 		free(ui);
