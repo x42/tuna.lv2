@@ -81,7 +81,7 @@ void debug_printf (const char *fmt,...) {}
 static float fftx_scan_overtones(struct FFTAnalysis *ft,
 		const float threshold, float fundamental, float *octave) {
 	float freq = fundamental * (*octave);
-	float scan  = MAX(1, freq * .1f);
+	float scan  = MAX(2, freq * .1f);
 	float peak_dat = 0;
 	uint32_t peak_pos = 0;
 	for (uint32_t i = MAX(1, floorf(freq-scan)); i < ceilf(freq+scan); ++i) {
@@ -107,7 +107,7 @@ static float fftx_scan_overtones(struct FFTAnalysis *ft,
 	return fundamental;
 }
 
-static float fftx_find_note(struct FFTAnalysis *ft, const float threshold) {
+static float fftx_find_note(struct FFTAnalysis *ft, float threshold) {
 	/* find lowest peak above threshold */
 	float fundamental = 0;
 	float octave = 0;
@@ -126,6 +126,12 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float threshold) {
 					peak_dat = ft->power[i];
 					fundamental = f;
 					octave = o;
+					/* TODO -- this needs some more thought..
+					 * only prefer higher 'fundamental' if it's louder than
+					 * a /usual/ 1st overtone.
+					 */
+					threshold = peak_dat * 1.7;
+					//break;
 				}
 			}
 		}
@@ -341,7 +347,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .003));
+			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .003)); // needs tweaking
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
