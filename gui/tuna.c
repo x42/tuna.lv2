@@ -59,7 +59,7 @@
 #define L_NFO_XC (325.)
 
 #define L_TUN_XC (DAWIDTH / 2)
-#define L_TUN_YC (130)
+#define L_TUN_YC (125)
 
 
 #define L_FOO_XC (DAWIDTH / 2)
@@ -83,8 +83,6 @@ typedef struct {
 	PangoFontDescription *font[4];
   cairo_surface_t *frontface;
 
-	float p_mode;
-	float p_tuning;
 	float p_rms;
 	float p_freq;
 	float p_octave;
@@ -262,10 +260,11 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 
 	cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
 	char txt[255];
+	const float tuning = robtk_spin_get_value(ui->spb_tuning);
 
 	/* settings */
-	snprintf(txt, 255, "@ %5.1fHz\n", robtk_spin_get_value(ui->spb_tuning));
-	write_text_full(cr, txt, ui->font[F_M_SMALL], L_TUN_XC, L_TUN_YC, 0, 2, c_wht);
+	snprintf(txt, 255, "@ %5.1fHz\n", tuning);
+	write_text_full(cr, txt, ui->font[F_M_SMALL], L_TUN_XC, L_TUN_YC, 0, 1, c_wht);
 
 	/* HUGE info: note, ocatave, cent */
 	snprintf(txt, 255, "%-2s%.0f", notename[(int)ui->p_note], ui->p_octave);
@@ -277,6 +276,14 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 		snprintf(txt, 255, "+-0.00\u00A2");
 	}
 	write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_NFO_YC, 0, 1, c_wht);
+
+	float note = ui->p_note + (ui->p_octave+1) * 12.f;
+	if (note >= 0 && note < 128) {
+		const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
+		snprintf(txt, 255, "%7.2fHz", note_freq);
+		write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_TUN_YC, 0, 4, c_wht);
+	}
+
 
 	/* footer, Frequency || no-signal */
 	if (ui->p_freq > 0) {
