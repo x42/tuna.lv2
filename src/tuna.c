@@ -560,26 +560,29 @@ extension_data(const char* uri)
 	return NULL;
 }
 
-static const LV2_Descriptor descriptor = {
-	TUNA_URI "one",
-	instantiate,
-	connect_port,
-	NULL,
-	run,
-	NULL,
-	cleanup,
-	extension_data
+#define mkdesc(ID, NAME) \
+static const LV2_Descriptor descriptor ## ID = { \
+	TUNA_URI NAME,  \
+	instantiate,    \
+	connect_port,   \
+	NULL,           \
+	run,            \
+	NULL,           \
+	cleanup,        \
+	extension_data  \
 };
+
+mkdesc(0, "one")
+mkdesc(1, "one_gtk")
 
 LV2_SYMBOL_EXPORT
 const LV2_Descriptor*
 lv2_descriptor(uint32_t index)
 {
 	switch (index) {
-	case 0:
-		return &descriptor;
-	default:
-		return NULL;
+    case  0: return &descriptor0;
+    case  1: return &descriptor1;
+    default: return NULL;
 	}
 }
 

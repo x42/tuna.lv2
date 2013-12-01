@@ -140,13 +140,13 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	double dash1[] = {8.0};
 	double dash2[] = {16.0};
 
-	cairo_set_dash(cr, dash1, 1, ui->strobe_phase*2);
+	cairo_set_dash(cr, dash1, 1, ui->strobe_phase*-2);
 	cairo_set_line_width(cr, 8.0);
 	cairo_move_to(cr, 20, DAHEIGHT-50);
 	cairo_line_to(cr, DAWIDTH-20, DAHEIGHT-50);
 	cairo_stroke (cr);
 
-	cairo_set_dash(cr, dash2, 1, ui->strobe_phase);
+	cairo_set_dash(cr, dash2, 1, -ui->strobe_phase);
 	cairo_set_line_width(cr, 16.0);
 	cairo_move_to(cr, 20, DAHEIGHT-50);
 	cairo_line_to(cr, DAWIDTH-20, DAHEIGHT-50);
