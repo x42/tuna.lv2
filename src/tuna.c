@@ -522,7 +522,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 	else if (!self->dll_initialized) {
 		/* no signal detected; or below threshold */
 		*self->p_freq_out = 0;
-	  *self->p_error = -100.0;
+	  *self->p_error = 0;
 	}
 	/* else { no change, maybe short cycle } */
 
