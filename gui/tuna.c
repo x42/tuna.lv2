@@ -93,6 +93,7 @@ typedef struct {
 	/* smoothed values for display */
 	float s_rms;
 	float s_error;
+	float s_cent;
 
 	float strobe_tme;
 	float strobe_dpy;
@@ -270,8 +271,8 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	snprintf(txt, 255, "%-2s%.0f", notename[(int)ui->p_note], ui->p_octave);
 	write_text_full(cr, txt, ui->font[F_M_HUGE], L_NFO_XL, L_NFO_YC, 0, 3, c_wht);
 
-	if (ui->p_cent > -100) {
-		snprintf(txt, 255, "%+6.2f\u00A2", ui->p_cent);
+	if (ui->s_cent > -100) {
+		snprintf(txt, 255, "%+6.2f\u00A2", ui->s_cent);
 	} else {
 		snprintf(txt, 255, "+-0.00\u00A2");
 	}
@@ -297,13 +298,13 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 
 	/* cent bar graph */
 	if (ui->p_freq > 0) {
-		if (fabsf(ui->p_cent) <= 5.0) {
+		if (fabsf(ui->s_cent) <= 5.0) {
 			cairo_set_source_rgba (cr, .0, .8, .0, .7);
 		} else {
 			cairo_set_source_rgba (cr, .8, .0, .0, .7);
 		}
 		cairo_rectangle (cr, L_CNT_XC, L_CNT_YT,
-				L_BAR_W * ui->p_cent / 100., L_CNT_H);
+				L_BAR_W * ui->s_cent / 100., L_CNT_H);
 		cairo_fill(cr);
 	}
 
@@ -610,6 +611,7 @@ instantiate(
 	ui->strobe_tme = 0;
 	ui->strobe_phase = 0;
 	ui->s_rms = 0;
+	ui->s_cent = 0;
 	ui->s_error = 0;
 
 	*widget = NULL;
@@ -703,7 +705,9 @@ port_event(LV2UI_Handle handle,
 		case TUNA_FREQ_OUT: ui->p_freq = v; break;
 		case TUNA_OCTAVE:   ui->p_octave = v; break;
 		case TUNA_NOTE:     ui->p_note = MAX(0, MIN(11,v)); break;
-		case TUNA_CENT:     ui->p_cent = v; break;
+		case TUNA_CENT:     ui->p_cent = v;
+				ui->s_cent += .3 * (v - ui->s_cent) + 1e-12;
+			break;
 		case TUNA_RMS:      ui->p_rms = v;
 			if (ui->p_rms < -70) {
 				ui->s_rms = -70;

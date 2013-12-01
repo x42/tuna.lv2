@@ -413,7 +413,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		*self->p_freq_out = 0;
 		*self->p_octave   = 4;
 		*self->p_note     = 9;
-		*self->p_cent     = -100;
+		*self->p_cent     = 0;
 		*self->p_error    = -100;
 	}
 	if (self->midi_variant) {
