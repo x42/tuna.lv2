@@ -52,10 +52,10 @@
  * -70dBFS = (10^(.05 * -70))^2 = 0.0000001
  * -90dBFS = (10^(.05 * -70))^2 = 0.000000001
  */
-#define RMS_SIGNAL_THRESHOLD      (0.0000001f)
+#define RMS_SIGNAL_THRESHOLD     (0.0000002f)
 
 /* use FFT signal if tracked freq & FFT-freq differ by more than */
-#define FFT_FREQ_THESHOLD_FAC (.05f)
+#define FFT_FREQ_THESHOLD_FAC (.10f)
 /* but at least .. [Hz] */
 #define FFT_FREQ_THESHOLD_MIN (5.f)
 
@@ -211,6 +211,7 @@ typedef struct {
 	int fft_note;
 	int fft_note_count;
 	bool fftonly_variant;
+	int fft_timeout;
 
 	/* MIDI Out */
 	bool midi_variant;
@@ -283,10 +284,10 @@ instantiate(
 
 	self->fftx = (struct FFTAnalysis*) calloc(1, sizeof(struct FFTAnalysis));
 	int fft_size;
-	if (self->fftonly_variant || self->midi_variant) {
+	if (self->fftonly_variant) {
 		fft_size = MAX(8192, rate / 5);
 	} else {
-		fft_size = MAX(2048, rate / 20);
+		fft_size = MAX(2048, rate / 10);
 	}
 	/* round up to next power of two */
 	fft_size--;
@@ -296,6 +297,7 @@ instantiate(
 	fft_size |= fft_size >> 8;
 	fft_size |= fft_size >> 16;
 	fft_size++;
+	fft_size = MIN(32768, fft_size);
 	ft_init(self->fftx, fft_size, rate, 60);
 
 	return (LV2_Handle)self;
@@ -379,8 +381,9 @@ static void midi_tx(Tuna *self, int64_t tme, uint8_t raw_midi[3]) {
 
 static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
 	uint8_t raw_midi[3];
+	if (!self->midi_variant) return;
 
-	if (freq < 10 || rms == 0) {
+	if (freq < 10 || rms < 0) {
 		if (self->m_vel == 0 || self->m_key == 0) return;
 
 		// ignore the first detection
@@ -475,6 +478,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 	float rms_postfilter = self->rms_postfilter;
 	const float rms_omega  = self->rms_omega;
 	float freq = self->tuna_fc;
+	const float rms_threshold = self->midi_variant ? RMS_SIGNAL_THRESHOLD * 5 : RMS_SIGNAL_THRESHOLD;
 
 	/* initialize local vars */
 	float    detected_freq = 0;
@@ -490,7 +494,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		/* midi-note */
 		freq = tuning * powf(2.0, floorf(-70 - mode) / 12.f);
 	} else {
-		/* auto-detect */
+		/* auto-detect  - run FFT */
 		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
 	}
 
@@ -500,7 +504,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		/* 1) calculate RMS */
 		rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
 
-		if (rms_signal < RMS_SIGNAL_THRESHOLD) {
+		if (rms_signal < rms_threshold) {
 			/* signal below threshold */
 			self->dll_initialized = false;
 			self->fft_initialized = false;
@@ -509,7 +513,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 #ifdef OUTPUT_POSTFILTER
 			if (!self->midi_variant) { a_out[n] = 0; }
 #endif
-			midi_signal(self, n, 0, 0);
+			midi_signal(self, n, 0, -1);
 			continue;
 		}
 
@@ -546,19 +550,19 @@ run(LV2_Handle handle, uint32_t n_samples)
 						detected_freq = fft_peakfreq;
 						detected_count= 1;
 						self->dll_initialized = true; // fake for readout
+						self->fft_timeout = 0;
+						midi_signal(self, n, fft_peakfreq, rms_signal);
 					}
 				} else
 				if ((note >=0 && note < 128) && freq != note_freq &&
-						(   !self->dll_initialized
-						 || freq < 20
-						 /* ignore 1st overtone (often louder than fundamental) */
-						 || (self->fft_note_count > 8192 && fabsf(freq * 2.f - note_freq) > 10)
-						 || (self->fft_note_count > 2048 && fabsf(freq - note_freq) > MAX(FFT_FREQ_THESHOLD_MIN, freq * FFT_FREQ_THESHOLD_FAC))
-						 || (self->fft_note_count > self->rate)
+						(   (!self->dll_initialized && self->fft_note_count > 0)
+						 || (self->fft_note_count > 1024 && fabsf(freq - note_freq) > MAX(FFT_FREQ_THESHOLD_MIN, freq * FFT_FREQ_THESHOLD_FAC))
+						 || (self->fft_note_count > self->rate / 8)
 						)
 					 ) {
-					info_printf("FFT adjust %fHz -> %fHz (midi: %d)\n", freq, note_freq, note);
+					info_printf("FFT adjust %fHz -> %fHz (midi: %d, fft:%fHz) cnt:%d\n", freq, note_freq, note, fft_peakfreq, self->fft_note_count);
 					freq = note_freq;
+					//self->dll_e2 = self->rate / (fft_peakfreq-.1) / 2.f;
 				}
 			}
 		}
@@ -592,9 +596,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 			/* re-initialize filter */
 			bandpass_setup(&self->fb, self->rate, self->tuna_fc
-					/* filter-bandwidth, a tad more than a semitone, but at least 15Hz */
-					, MAX(8, self->tuna_fc * .15)
-					, 2 /*th order butterworth */);
+					, MAX(10, self->tuna_fc * .25) // TODO tweak value for midi.
+					, 4 /*th order butterworth */);
 			self->filter_init = 16;
 		}
 		
@@ -611,7 +614,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 				a_out[n] = signal * (16.0 - self->filter_init) / 16.0;
 			}
 #endif
-			midi_signal(self, n, 0, 0);
+			//midi_signal(self, n, 0, 0);
 			continue;
 		}
 #ifdef OUTPUT_POSTFILTER
@@ -622,13 +625,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
-		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .01 : .02)) {
+		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .003 : .01)) {
 			debug_printf("signal too low after filter: %f %f\n",
 					20.*log10f(sqrt(rms_signal)),
 					20.*log10f(sqrt(rms_postfilter)));
 			self->dll_initialized = false;
 			prev_smpl = 0;
-			midi_signal(self, n, 0, 0);
+			//midi_signal(self, n, 0, -4); // TODO re-enable w/much lower threshold
 			continue;
 		}
 
@@ -656,9 +659,17 @@ run(LV2_Handle handle, uint32_t n_samples)
 				self->dll_t1 += self->dll_b * self->dll_e0 + self->dll_e2;
 				self->dll_e2 += self->dll_c * self->dll_e0;
 
-				const float dfreq = self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
-				debug_printf("detected Freq: %.2f (error: %.2f [samples])\n",
-						dfreq, self->dll_e0);
+				const float dfreq0 = self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
+				const float dfreq2 = self->rate / (self->dll_e2) / 2.f;
+				debug_printf("detected Freq: %.2f flt: %.2f (error: %.2f [samples]) diff:%f)\n",
+						dfreq0, dfreq2, self->dll_e0, (self->dll_t1 - self->dll_t0) - self->dll_e2);
+
+				float dfreq;
+				if (fabsf(self->dll_e0 * freq / self->rate) > .02) {
+					dfreq = dfreq0;
+				} else {
+					dfreq = dfreq2;
+				}
 
 #if 1
 				/* calculate average of all detected values in this cycle.
@@ -670,7 +681,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 				detected_freq = dfreq;
 				detected_count= 1;
 #endif
-				midi_signal(self, n, dfreq, rms_signal);
+				midi_signal(self, n, dfreq0, rms_signal);
 			}
 		}
 		prev_smpl = signal;
@@ -680,6 +691,14 @@ run(LV2_Handle handle, uint32_t n_samples)
 	self->prev_smpl = prev_smpl;
 	self->rms_signal = rms_signal;
 	self->rms_postfilter = rms_postfilter;
+
+	if (self->fftonly_variant) {
+		if (self->fft_timeout < self->rate) {
+			self->fft_timeout += n_samples;
+		} else {
+			self->dll_initialized = false;
+		}
+	}
 
 	if (!self->dll_initialized) {
 		self->monotonic_cnt = 0;
@@ -721,7 +740,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 	  *self->p_octave   = (note/12) -1;
 	  *self->p_note     = note%12;
 	  *self->p_cent     = 100.f * cent;
-	  *self->p_error    =  50.0 * self->dll_e0 / note_freq;
+	  *self->p_error    = 100.0 * self->dll_e0 * note_freq / self->rate;
 
 	}
 	else if (!self->dll_initialized) {
@@ -738,12 +757,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 
-#ifndef OUTPUT_POSTFILTER
+#ifdef OUTPUT_POSTFILTER
+	if (self->fftonly_variant)
+#endif
 	/* forward audio */
 	if (self->a_in != self->a_out) {
 		memcpy(self->a_out, self->a_in, sizeof(float) * n_samples);
 	}
-#endif
 }
 
 static void
@@ -791,7 +811,9 @@ static const LV2_Descriptor descriptor ## ID = { \
 
 mkdesc_tuna(0, "one")
 mkdesc_tuna(1, "one_gtk")
-mkdesc_midi(2, "midi")
+mkdesc_tuna(2, "fft")
+mkdesc_tuna(3, "fft_gtk")
+mkdesc_midi(4, "midi")
 
 LV2_SYMBOL_EXPORT
 const LV2_Descriptor*
@@ -801,6 +823,8 @@ lv2_descriptor(uint32_t index)
     case  0: return &descriptor0;
     case  1: return &descriptor1;
     case  2: return &descriptor2;
+    case  3: return &descriptor3;
+    case  4: return &descriptor4;
     default: return NULL;
 	}
 }

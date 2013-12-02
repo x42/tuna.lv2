@@ -101,6 +101,7 @@ typedef struct {
 	float strobe_phase;
 
 	bool disable_signals;
+	bool fft_mode;
 } TunaUI;
 
 static const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -241,10 +242,14 @@ static void render_frontface(TunaUI* ui) {
 	write_text_full(cr, "signal level", ui->font[F_M_SMALL], L_CNT_XC, L_LVL_YT + L_LVL_H/2, 0, 2, c_g60);
 
 	/* Accuracy background */
-	CairoSetSouerceRGBA(c_g30);
-	rounded_rectangle (cr, L_BAR_X - 2, L_ERR_YT - 2, L_BAR_W + 4 , L_ERR_H + 4, 4);
-	cairo_fill(cr);
-	write_text_full(cr, "accuracy", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
+	if (!ui->fft_mode) {
+		CairoSetSouerceRGBA(c_g30);
+		rounded_rectangle (cr, L_BAR_X - 2, L_ERR_YT - 2, L_BAR_W + 4 , L_ERR_H + 4, 4);
+		cairo_fill(cr);
+		write_text_full(cr, "accuracy", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
+	} else {
+		write_text_full(cr, "[FFT only mode]", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
+	}
 
 #if 1 /* version info */
   write_text_full(cr, "x42 tuna " TUNAVERSION, ui->font[F_M_SMALL],
@@ -256,8 +261,8 @@ static void render_frontface(TunaUI* ui) {
 	cairo_pattern_t* pat = cairo_pattern_create_linear (0.0, 0.0, L_BAR_W, 0.0);
 	cairo_pattern_add_color_stop_rgba (pat, .0,               .0, .0, .0, .0);
 	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-70), .0, .0, .5, .6);
-	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-60), .1, .2, .8, .6);
-	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-50), .0, .7, .1, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-55), .1, .2, .8, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-45), .0, .7, .1, .6);
 	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-18), .0, .8, .0, .6);
 	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-6),  .4, .8, .0, .6);
 	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-3),  .8, .8, .0, .6);
@@ -367,21 +372,33 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	}
 
 	/* accuracy bar graph */
-	if (ui->p_freq == 0) {
+	if (ui->p_freq == 0 || ui->fft_mode) {
 		; // no data
-	} else if (fabsf(ui->s_error) < 5) {
-		cairo_set_source_rgba (cr, .0, .8, .0, .3);
-		rounded_rectangle (cr, L_CNT_XC-50, L_ERR_YT, 100, L_ERR_H, 4);
+	} else if (fabsf(ui->s_error) < 10) {
+		cairo_set_source_rgba (cr, .0, .8, .0, .4);
+		rounded_rectangle (cr, L_CNT_XC-40, L_ERR_YT, 80, L_ERR_H, 4);
+		cairo_fill(cr);
+		if (fabsf(ui->s_error) > 2) {
+			cairo_set_source_rgba (cr, .0, .0, .9, .2);
+			cairo_rectangle (cr, L_CNT_XC, L_ERR_YT,
+					L_BAR_W * ui->s_error / 150.0, L_ERR_H);
+			cairo_fill(cr);
+		}
+	} else if (ui->s_error > -25 && ui->s_error < 25) {
+		/* normal range -50..+50 blue */
+		cairo_set_source_rgba (cr, .2, .3, .9, .7);
+		cairo_rectangle (cr, L_CNT_XC, L_ERR_YT,
+				L_BAR_W * ui->s_error / 150.0, L_ERR_H);
 		cairo_fill(cr);
 	} else if (ui->s_error > -50 && ui->s_error < 50) {
-		/* normal range -50..+50*/
-		cairo_set_source_rgba (cr, .7, .8, .9, .7);
+		/* normal range -50..+50 yellow*/
+		cairo_set_source_rgba (cr, .6, .6, .2, .7);
 		cairo_rectangle (cr, L_CNT_XC, L_ERR_YT,
 				L_BAR_W * ui->s_error / 150.0, L_ERR_H);
 		cairo_fill(cr);
 	} else if (ui->s_error > -100 && ui->s_error < 100) {
 		/* out of phase */
-		cairo_set_source_rgba (cr, .9, .5, .5, .7);
+		cairo_set_source_rgba (cr, .9, .3, .2, .7);
 		cairo_rectangle (cr, L_CNT_XC, L_ERR_YT,
 				L_BAR_W * ((ui->s_error + ((ui->s_error>0)?33.3:-33.3)) / 266.6), L_ERR_H);
 		cairo_fill(cr);
@@ -662,9 +679,9 @@ instantiate(
 	*widget = NULL;
 
 	if (!strncmp(plugin_uri, TUNA_URI "one", 31 + 3 )) {
-		; //
-	} else if (!strncmp(plugin_uri, TUNA_URI "strobe", 31 + 6)) {
-		; //
+		ui->fft_mode = false;
+	} else if (!strncmp(plugin_uri, TUNA_URI "fft", 31 + 3 )) {
+		ui->fft_mode = true;
 	} else {
 		free(ui);
 		return NULL;
@@ -753,7 +770,7 @@ port_event(LV2UI_Handle handle,
 		case TUNA_OCTAVE:   ui->p_octave = v; break;
 		case TUNA_NOTE:     ui->p_note = MAX(0, MIN(11,v)); break;
 		case TUNA_CENT:     ui->p_cent = v;
-				ui->s_cent += .3 * (v - ui->s_cent) + 1e-12;
+				ui->s_cent += .4 * (v - ui->s_cent) + 1e-12;
 			break;
 		case TUNA_RMS:      ui->p_rms = v;
 			if (ui->p_rms < -90) {
