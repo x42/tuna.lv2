@@ -385,18 +385,20 @@ static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
 
 	if (freq < 10 || rms < 0) {
 		if (self->m_vel == 0 || self->m_key == 0) return;
-
-		// ignore the first detection
+#if 1
 		if (self->m_stat_key != 255) {
 			self->m_stat_key = 255;
 			self->m_stat_cnt = 1;
 			return;
 		}
-		// and a few others too.
-		if (self->m_stat_cnt < 100) {
+		if (self->m_stat_cnt < (9 * (200-(int)self->m_key))) {
 			self->m_stat_cnt++;
 			return;
 		}
+		//printf("MIDI @%8d OFF %.0f || %d\n", self->monotonic_cnt + tme, rms, self->m_stat_cnt);
+		self->m_stat_cnt =0;
+#endif
+
 		raw_midi[0] = 0x80;
 		raw_midi[1] = self->m_key;
 		raw_midi[2] = self->m_vel = 0;
@@ -406,21 +408,42 @@ static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
 		const float tuning = *self->p_tuning;
 		const int key = rintf(12.f * logf(freq / tuning) / logf(2.f) + 69.0);
 		const int vel = 127;
-
+#if 1
+		if (fabsf(100.0 * self->dll_e0 * freq / self->rate) > 30) {
+			return;
+		}
+#endif
+#if 1
 		// ignore the first detection
 		if (self->m_stat_key != key) {
+			//printf("first note ON prev_cnt: %2d key: %3d      ||err: %+10.5f\n", self->m_stat_cnt, self->m_stat_key, 100.0 * self->dll_e0 * freq / self->rate);
 			self->m_stat_key = key;
 			self->m_stat_cnt = 1;
 			return;
 		}
-		// and a few others too.
-		if (self->m_stat_cnt < 16) {
+		// and a few others too. -- every phase
+		if (self->m_stat_cnt < (127 - (int)key) / 5 ) {
 			self->m_stat_cnt++;
 			return;
 		}
+#endif
+#if 0
+		if (fabsf(100.0 * self->dll_e0 * freq / self->rate) > 3) {
+			return;
+		}
+#endif
+		if (self->m_vel == vel && self->m_key == key) {
+			return;
+		}
+#if 0
+		printf("MIDI @%8d ON  %6.1fHz (%3d) %5.2f || %2d  err: %+10.5f\n", self->monotonic_cnt + tme,
+				freq, key, rms*100,
+				self->m_stat_cnt,
+				100.0 * self->dll_e0 * freq / self->rate);
+#endif
+		self->m_stat_cnt =0;
 
 		// TODO handle velocity (and velocity changes ?)
-		if (self->m_vel == vel && self->m_key == key) return;
 		if (self->m_vel != 0 && self->m_key != key) {
 			/* send note off */
 			raw_midi[0] = 0x80;
