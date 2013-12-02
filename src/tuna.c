@@ -52,7 +52,7 @@
  * -70dBFS = (10^(.05 * -70))^2 = 0.0000001
  * -90dBFS = (10^(.05 * -70))^2 = 0.000000001
  */
-#define RMS_SIGNAL_THRESHOLD      (0.000001f)
+#define RMS_SIGNAL_THRESHOLD      (0.0000001f)
 
 /* use FFT signal if tracked freq & FFT-freq differ by more than */
 #define FFT_FREQ_THESHOLD_FAC (.05f)

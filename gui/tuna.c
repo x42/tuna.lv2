@@ -82,6 +82,7 @@ typedef struct {
 
 	PangoFontDescription *font[4];
   cairo_surface_t *frontface;
+	cairo_pattern_t* meterpattern;
 
 	float p_rms;
 	float p_freq;
@@ -117,32 +118,35 @@ enum fontsize {
  */
 
 
-static inline float log_meter (float db) {
+static inline float log_meter80 (float db) {
 	float def = 0.0f;
 
-	if (db < -70.0f) {
+	if (db < -80.0f) {
 		def = 0.0f;
+	} else if (db < -70.0f) {
+		def = (db + 80.0f) * 0.50f;
 	} else if (db < -60.0f) {
-		def = (db + 70.0f) * 0.25f;
+		def = (db + 70.0f) * 0.75f + 5.0f;
 	} else if (db < -50.0f) {
-		def = (db + 60.0f) * 0.5f + 2.5f;
+		def = (db + 60.0f) * 1.00f + 12.5f;
 	} else if (db < -40.0f) {
-		def = (db + 50.0f) * 0.75f + 7.5f;
+		def = (db + 50.0f) * 1.25f + 22.5f;
 	} else if (db < -30.0f) {
-		def = (db + 40.0f) * 1.5f + 15.0f;
+		def = (db + 40.0f) * 1.50f + 35.0f;
 	} else if (db < -20.0f) {
-		def = (db + 30.0f) * 2.0f + 30.0f;
-	} else if (db < 6.0f) {
-		def = (db + 20.0f) * 2.5f + 50.0f;
+		def = (db + 30.0f) * 1.75f + 50.0f;
+	} else if (db < 2.0f) {
+		def = (db + 20.0f) * 2.00f + 67.5f;
 	} else {
-		def = 115.0f;
+		def = 110.0f;
 	}
-	return (def/115.0f);
+	return (def/110.0f);
 }
 
 static int deflect(float val) {
-	int lvl = rint(L_BAR_W * log_meter(val));
-	if (lvl < 5) lvl = 5;
+	int lvl = rint(L_BAR_W * log_meter80(val));
+	if (lvl < 2) lvl = 0;
+	else if (lvl < 4) lvl = 4;
 	if (lvl >= L_BAR_W) lvl = L_BAR_W;
 	return lvl;
 }
@@ -215,12 +219,15 @@ static void render_frontface(TunaUI* ui) {
 	CairoSetSouerceRGBA(c_g30);
 	rounded_rectangle (cr, L_BAR_X - 2, L_LVL_YT - 2, L_BAR_W + 4 , L_LVL_H + 4, 4);
 	cairo_fill(cr);
-	const double dash[] = {1.5};
 	cairo_save(cr);
-	cairo_set_dash(cr, dash, 1, 0);
-	for (int db= -60; db <= 0; db+=6) {
-		if (db < -18) {
+	//const double dash[] = {1.5};
+	//cairo_set_dash(cr, dash, 1, 0);
+	for (int db= -72; db <= 0; db+=6) {
+		if (db >= -30 && db <= -24) continue; // text  on top
+		if (db <= -60) {
 			CairoSetSouerceRGBA(c_gry);
+		} else if (db < -18) {
+			CairoSetSouerceRGBA(c_g60);
 		} else if (db < 0) {
 			CairoSetSouerceRGBA(c_g80);
 		} else {
@@ -245,6 +252,49 @@ static void render_frontface(TunaUI* ui) {
 #endif
 
   cairo_destroy(cr);
+
+	cairo_pattern_t* pat = cairo_pattern_create_linear (0.0, 0.0, L_BAR_W, 0.0);
+	cairo_pattern_add_color_stop_rgba (pat, .0,               .0, .0, .0, .0);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-70), .0, .0, .5, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-60), .1, .2, .8, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-50), .0, .7, .1, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-18), .0, .8, .0, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-6),  .4, .8, .0, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-3),  .8, .8, .0, .6);
+	cairo_pattern_add_color_stop_rgba (pat, log_meter80(-1),  .8, .4, .0, .6);
+	cairo_pattern_add_color_stop_rgba (pat, 1.0,              .8, .0, .0, .6);
+
+#if 0
+	if (!getenv("NO_METER_SHADE") || strlen(getenv("NO_METER_SHADE")) == 0) {
+		cairo_pattern_t* shade_pattern = cairo_pattern_create_linear (0.0, 0.0, 0.0, L_LVL_H);
+		cairo_pattern_add_color_stop_rgba (shade_pattern, 0.0, 0.0, 0.0, 0.0, 0.15);
+		cairo_pattern_add_color_stop_rgba (shade_pattern, .35, 1.0, 1.0, 1.0, 0.10);
+		cairo_pattern_add_color_stop_rgba (shade_pattern, .53, 0.0, 0.0, 0.0, 0.05);
+		cairo_pattern_add_color_stop_rgba (shade_pattern, 1.0, 0.0, 0.0, 0.0, 0.25);
+
+		cairo_surface_t* surface;
+		cairo_t* tc = 0;
+		surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, L_BAR_W, L_LVL_H);
+		tc = cairo_create (surface);
+
+		cairo_set_operator (tc, CAIRO_OPERATOR_SOURCE);
+		cairo_set_source (tc, pat);
+		cairo_rectangle (tc, 0, 0, L_BAR_W, L_LVL_H);
+		cairo_fill (tc);
+		cairo_pattern_destroy (pat);
+
+		cairo_set_operator (tc, CAIRO_OPERATOR_OVER);
+		cairo_set_source (tc, shade_pattern);
+		cairo_rectangle (tc, 0, 0, L_BAR_W, L_LVL_H);
+		cairo_fill (tc);
+		cairo_pattern_destroy (shade_pattern);
+
+		pat = cairo_pattern_create_for_surface (surface);
+		cairo_destroy (tc);
+		cairo_surface_destroy (surface);
+	}
+#endif
+	ui->meterpattern = pat;
 }
 
 
@@ -309,17 +359,12 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	}
 
 	/* level bar graph */
-	if (ui->s_rms < -60) {
-		cairo_set_source_rgba (cr, .0, .0, .8, .7);
-	} else if (ui->s_rms < -10) {
-		cairo_set_source_rgba (cr, .0, .8, .0, .7);
-	} else if (ui->s_rms < -3) {
-		cairo_set_source_rgba (cr, .8, .8, .0, .7);
-	} else {
-		cairo_set_source_rgba (cr, .8, .0, .0, .7);
+	float level = deflect(ui->s_rms);
+	if (level > 4) {
+		cairo_set_source(cr, ui->meterpattern);
+		rounded_rectangle (cr, L_BAR_X, L_LVL_YT, deflect(ui->s_rms + 6.0), L_LVL_H, 3);
+		cairo_fill(cr);
 	}
-	rounded_rectangle (cr, L_BAR_X, L_LVL_YT, deflect(ui->s_rms), L_LVL_H, 4);
-	cairo_fill(cr);
 
 	/* accuracy bar graph */
 	if (ui->p_freq == 0) {
@@ -343,7 +388,7 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	} else if (ui->s_error >= 100) {
 		cairo_set_source_rgba (cr, .9, .0, .0, .7);
 		cairo_rectangle (cr, L_CNT_XC, L_ERR_YT,
-				L_BAR_W * 5 , L_ERR_H);
+				L_BAR_W * .5 , L_ERR_H);
 		cairo_fill(cr);
 	} else if (ui->s_error <= -100) {
 		cairo_set_source_rgba (cr, .9, .0, .0, .7);
@@ -662,6 +707,8 @@ cleanup(LV2UI_Handle handle)
 	rob_box_destroy(ui->hbox);
 
   cairo_surface_destroy(ui->frontface);
+	cairo_pattern_destroy(ui->meterpattern);
+
 	for (uint32_t i = 0; i < 4; ++i) {
 		pango_font_description_free(ui->font[i]);
 	}
@@ -709,8 +756,8 @@ port_event(LV2UI_Handle handle,
 				ui->s_cent += .3 * (v - ui->s_cent) + 1e-12;
 			break;
 		case TUNA_RMS:      ui->p_rms = v;
-			if (ui->p_rms < -70) {
-				ui->s_rms = -70;
+			if (ui->p_rms < -90) {
+				ui->s_rms = -90;
 			} else {
 				ui->s_rms += .3 * (v - ui->s_rms) + 1e-12;
 			}
