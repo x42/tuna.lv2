@@ -31,28 +31,36 @@ struct FFTAnalysis {
 	float *fft_in;
 	float *fft_out;
 	float *power;
+	float *phase;
+	float *phase_h;
 	fftwf_plan fftplan;
 
 	float *ringbuf;
 	uint32_t rboff;
-	uint32_t afpvf;
+	uint32_t smps;
+	uint32_t sps;
+	uint32_t step;
 };
 
-static void ft_init(struct FFTAnalysis *ft, uint32_t window_size, double rate) {
+static void ft_init(struct FFTAnalysis *ft, uint32_t window_size, double rate, double fps) {
 	ft->rate        = rate;
 	ft->window_size = window_size;
 	ft->data_size   = window_size / 2;
 	ft->hann_window = NULL;
 	ft->rboff = 0;
-	ft->afpvf = 0;
+	ft->smps = 0;
+	ft->step = 0;
+	ft->sps = (fps > 0) ? ceil(rate / fps) : 0;
 
 	ft->ringbuf = (float *) calloc(window_size, sizeof(float));
 	ft->fft_in  = (float *) fftwf_malloc(sizeof(float) * window_size);
 	ft->fft_out = (float *) fftwf_malloc(sizeof(float) * window_size);
 	ft->power   = (float *) calloc(ft->data_size, sizeof(float));
+	ft->phase   = (float *) calloc(ft->data_size, sizeof(float));
+	ft->phase_h = (float *) calloc(ft->data_size, sizeof(float));
 
 	memset(ft->fft_out, 0, sizeof(float) * window_size);
-	ft->fftplan = fftwf_plan_r2r_1d(window_size, ft->fft_in, ft->fft_out, FFTW_R2HC, FFTW_ESTIMATE);
+	ft->fftplan = fftwf_plan_r2r_1d(window_size, ft->fft_in, ft->fft_out, FFTW_R2HC, FFTW_MEASURE);
 }
 
 static void ft_free(struct FFTAnalysis *ft) {
@@ -62,6 +70,8 @@ static void ft_free(struct FFTAnalysis *ft) {
 	free(ft->fft_in);
 	free(ft->fft_out);
 	free(ft->power);
+	free(ft->phase);
+	free(ft->phase_h);
 	free(ft);
 }
 
@@ -95,6 +105,9 @@ static void ft_analyze(struct FFTAnalysis *ft) {
 #define FIm (ft->fft_out[ft->window_size-i])
 	for (uint32_t i = 1; i < ft->data_size - 1; ++i) {
 		ft->power[i] = (FRe * FRe) + (FIm * FIm);
+		float phase = atan2f(FIm, FRe);
+		ft->phase_h[i] = ft->phase[i];
+		ft->phase[i] = phase;
 	}
 #undef FRe
 #undef FIm
@@ -102,10 +115,13 @@ static void ft_analyze(struct FFTAnalysis *ft) {
 
 static void fftx_reset(struct FFTAnalysis *ft) {
 	memset(ft->power, 0, ft->data_size * sizeof(float));
+	memset(ft->phase, 0, ft->data_size * sizeof(float));
+	memset(ft->phase_h, 0, ft->data_size * sizeof(float));
 	memset(ft->ringbuf, 0, ft->window_size * sizeof(float));
 	memset(ft->fft_out, 0, ft->window_size * sizeof(float));
 	ft->rboff = 0;
-	ft->afpvf = 0;
+	ft->smps = 0;
+	ft->step = 0;
 }
 
 static int fftx_run(struct FFTAnalysis *ft,
@@ -129,12 +145,15 @@ static int fftx_run(struct FFTAnalysis *ft,
 	}
 
 	ft->rboff = (ft->rboff + n_samples) % n_siz;
-#if 0
-	ft->afpvf += n_samples;
-	if (ft->afpvf < ft->rate / 60) {
+#if 1
+	ft->smps += n_samples;
+	if (ft->smps < ft->sps) {
 		return -1;
 	}
-	ft->afpvf = 0;
+	ft->step = ft->smps;
+	ft->smps = 0;
+#else
+	ft->step = n_samples;
 #endif
 
 	/* copy samples from ringbuffer into fft-buffer */
