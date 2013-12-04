@@ -82,13 +82,12 @@ void debug_printf (const char *fmt,...) {}
 #include "spectr.c"
 #include "fft.c"
 
-static float fftx_scan_overtones(struct FFTAnalysis *ft,
-		const float threshold, float fundamental, float *octave, float *fq) {
-	float freq = fundamental * (*octave);
-	float scan  = MAX(2, freq * .1f);
+static int fftx_scan_overtones(struct FFTAnalysis *ft,
+		const float threshold, uint32_t bin, uint32_t octave) {
+	const float scan  = MAX(2, (float) bin * .1f);
 	float peak_dat = 0;
 	uint32_t peak_pos = 0;
-	for (uint32_t i = MAX(1, floorf(freq-scan)); i < ceilf(freq+scan); ++i) {
+	for (uint32_t i = MAX(1, floorf(bin-scan)); i < ceilf(bin+scan); ++i) {
 		if (
 				   ft->power[i] > threshold
 				&& ft->power[i] > peak_dat
@@ -97,28 +96,26 @@ static float fftx_scan_overtones(struct FFTAnalysis *ft,
 			 ) {
 			peak_pos = i;
 			peak_dat = ft->power[i];
+			debug_printf("ovt: bin %d oct %d th-fact: %f\n", i, octave, ft->power[i]/ threshold);
 			break;
 		}
 	}
 	if (peak_pos > 0) {
-		fundamental = (float) peak_pos / (*octave);
-		(*fq) = fftx_freq_at_bin(ft, peak_pos) / (*octave);
-		(*octave) *=2;
-		if ((*octave) < 32) {
-			fundamental = fftx_scan_overtones(ft, threshold, fundamental, octave, fq);
+		octave *= 2;
+		if (octave <= 16) {
+			octave = fftx_scan_overtones(ft, threshold * .003, peak_pos * 2, octave);
 		}
 	}
-	return fundamental;
+	return octave;
 }
 
-static float fftx_find_note(struct FFTAnalysis *ft, float threshold) {
+static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
 	/* find lowest peak above threshold */
-	float fundamental = 0;
-	float freq = 0;
-	float octave = 0;
+	uint32_t fundamental = 0;
+	uint32_t octave = 0;
 	float peak_dat = 0;
-	const uint32_t brkpos = ft->data_size * 4000 / ft->rate;
-	const uint32_t baspos = ft->data_size * 100 / ft->rate;
+	const uint32_t brkpos = ft->data_size * 6000 / ft->rate;
+	float threshold = abs_threshold;
 
 	for (uint32_t i = 2; i < brkpos; ++i) {
 		if (
@@ -127,18 +124,13 @@ static float fftx_find_note(struct FFTAnalysis *ft, float threshold) {
 				&& ft->power[i] > ft->power[i+1]
 			 ) {
 
-			float o = 2;
-			float fq = 0;
-			float f = fftx_scan_overtones(ft, threshold, i, &o, &fq);
-			if (o > 3 || (i > baspos && o > 2)) {
+			int o = fftx_scan_overtones(ft, ft->power[i] * .0001, i * 2, 2);
+			if (o > 2  && o > octave) {
 				if (ft->power[i] > peak_dat) {
 					peak_dat = ft->power[i];
-					fundamental = f;
-					freq = fq;
+					fundamental = i;
 					octave = o;
-					/* TODO -- this needs some more thought..
-					 * only prefer higher 'fundamental' if it's louder than
-					 * a /usual/ 1st overtone.
+					/* only prefer higher 'fundamental' if it's louder than a /usual/ 1st overtone.
 					 */
 					threshold = peak_dat * 20; // ~26dB
 					//break;
@@ -147,10 +139,10 @@ static float fftx_find_note(struct FFTAnalysis *ft, float threshold) {
 		}
 	}
 
-	debug_printf("fun: %.1f octave: %.0f freq: %.1fHz freq: %.2fHz %d\n",
-			fundamental, octave, ft->rate * fundamental / ft->data_size / 2.f, freq, baspos);
+	debug_printf("fun: bin: %d octave: %d freq: %.1fHz th-fact: %f\n",
+			fundamental, octave, fftx_freq_at_bin(ft, fundamental), threshold / abs_threshold);
 	if (octave < 4) { return 0; }
-	return freq;
+	return fftx_freq_at_bin(ft, fundamental);
 }
 
 /******************************************************************************
@@ -274,9 +266,9 @@ instantiate(
 	self->fftx = (struct FFTAnalysis*) calloc(1, sizeof(struct FFTAnalysis));
 	int fft_size;
 	if (self->fftonly_variant) {
-		fft_size = MAX(8192, rate / 5);
+		fft_size = MAX(8192, rate / 8);
 	} else {
-		fft_size = MAX(2048, rate / 10);
+		fft_size = MAX(4096, rate / 15);
 	}
 	/* round up to next power of two */
 	fft_size--;
@@ -538,7 +530,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .001)); // needs tweaking
+			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .003));
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
@@ -563,12 +555,11 @@ run(LV2_Handle handle, uint32_t n_samples)
 						detected_count= 1;
 						self->dll_initialized = true; // fake for readout
 						self->fft_timeout = 0;
-						midi_signal(self, n, fft_peakfreq, rms_signal);
 					}
 				} else
 				if ((note >=0 && note < 128) && freq != note_freq &&
-						(   (!self->dll_initialized && self->fft_note_count > 0)
-						 || (self->fft_note_count > 1024 && fabsf(freq - note_freq) > MAX(FFT_FREQ_THESHOLD_MIN, freq * FFT_FREQ_THESHOLD_FAC))
+						(   (!self->dll_initialized && self->fft_note_count > 768)
+						 || (self->fft_note_count > 1536 && fabsf(freq - note_freq) > MAX(FFT_FREQ_THESHOLD_MIN, freq * FFT_FREQ_THESHOLD_FAC))
 						 || (self->fft_note_count > self->rate / 8)
 						)
 					 ) {
