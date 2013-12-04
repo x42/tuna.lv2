@@ -88,8 +88,6 @@ static float fftx_scan_overtones(struct FFTAnalysis *ft,
 	float scan  = MAX(2, freq * .1f);
 	float peak_dat = 0;
 	uint32_t peak_pos = 0;
-	const float freq_per_bin = ft->rate / ft->data_size / 2.f;
-	const float phasediff = M_PI * ft->step / ft->data_size;
 	for (uint32_t i = MAX(1, floorf(freq-scan)); i < ceilf(freq+scan); ++i) {
 		if (
 				   ft->power[i] > threshold
@@ -104,16 +102,7 @@ static float fftx_scan_overtones(struct FFTAnalysis *ft,
 	}
 	if (peak_pos > 0) {
 		fundamental = (float) peak_pos / (*octave);
-		const uint32_t i = peak_pos;
-		float phase = ft->phase[i] - ft->phase_h[i] - (float) i * phasediff;
-
-		/* clamp to -M_PI .. M_PI */
-		int over = phase / M_PI;
-		over += (over >= 0) ? (over&1) : -(over&1);
-		phase -= M_PI*(float)over;
-		/* scale according to overlap */
-		phase *= (ft->data_size / ft->step) / M_PI;
-		(*fq) = freq_per_bin * ((float) i + phase) / (*octave);
+		(*fq) = fftx_freq_at_bin(ft, peak_pos) / (*octave);
 		(*octave) *=2;
 		if ((*octave) < 32) {
 			fundamental = fftx_scan_overtones(ft, threshold, fundamental, octave, fq);
@@ -298,7 +287,7 @@ instantiate(
 	fft_size |= fft_size >> 16;
 	fft_size++;
 	fft_size = MIN(32768, fft_size);
-	ft_init(self->fftx, fft_size, rate, 60);
+	fftx_init(self->fftx, fft_size, rate, 0);
 
 	return (LV2_Handle)self;
 }
@@ -793,7 +782,7 @@ static void
 cleanup(LV2_Handle handle)
 {
 	Tuna* self = (Tuna*)handle;
-	ft_free(self->fftx);
+	fftx_free(self->fftx);
 	free(handle);
 }
 
