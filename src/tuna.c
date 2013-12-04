@@ -395,7 +395,7 @@ static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
 		self->m_key = 0;
 	} else {
 		const float tuning = *self->p_tuning;
-		const int key = rintf(12.f * logf(freq / tuning) / logf(2.f) + 69.0);
+		const int key = rintf(12.f * fast_log2(freq / tuning) + 69.0);
 		const int vel = 127;
 #if 1
 		if (fabsf(100.0 * self->dll_e0 * freq / self->rate) > 30) {
@@ -543,7 +543,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 				self->fft_note_count = 0;
 			} else {
 				/* calculate corresponding note - use midi notation 0..127 */
-				const int note = rintf(12.f * logf(fft_peakfreq / tuning) / logf(2.f) + 69.0);
+				const int note = rintf(12.f * log2f(fft_peakfreq / tuning) + 69.0);
 				/* ..and round it back to frequency */
 				const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
 
@@ -639,8 +639,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
 		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .003 : .01)) {
 			debug_printf("signal too low after filter: %f %f\n",
-					20.*log10f(sqrt(rms_signal)),
-					20.*log10f(sqrt(rms_postfilter)));
+					20.*fast_log10(sqrt(rms_signal)),
+					20.*fast_log10(sqrt(rms_postfilter)));
 			self->dll_initialized = false;
 			prev_smpl = 0;
 			//midi_signal(self, n, 0, -4); // TODO re-enable w/much lower threshold
@@ -728,7 +728,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		/* calculate average of detected frequency */
 		const float freq_avg = detected_freq / (float)detected_count;
 		/* ..and the corresponding note */
-		const int note = rintf(12.f * logf(freq_avg / tuning) / logf(2.f) + 69.0);
+		const int note = rintf(12.f * log2f(freq_avg / tuning) + 69.0);
 		const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
 
 		debug_printf("detected Freq: %.2f (error: %.2f [samples])\n", freq_avg, self->dll_e0);
@@ -763,9 +763,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 	/* else { no change, maybe short cycle } */
 
 	/* report input level
-	 * NB. 20 *log10f(sqrt(x)) == 10 * log(x) */
-	*self->p_rms = (rms_signal > .0000000001f) ? 10. * log10f(rms_signal) : -100;
-	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * log10f(rms_postfilter) : -100;
+	 * NB. 20 *log10f(sqrt(x)) == 10 * log10f(x) */
+	*self->p_rms = (rms_signal > .0000000001f) ? 10. * fast_log10(rms_signal) : -100;
+	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * fast_log10(rms_postfilter) : -100;
 
 	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 

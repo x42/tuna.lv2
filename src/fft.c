@@ -204,9 +204,33 @@ uint32_t fftx_bins(struct FFTAnalysis *ft) {
 }
 
 FFTX_FN_PREFIX
+inline float fast_log2 (float val) {
+	union {float f; int i;} t;
+	t.f = val;
+	int * const    exp_ptr =  &t.i;
+	int            x = *exp_ptr;
+	const int      log_2 = ((x >> 23) & 255) - 128;
+	x &= ~(255 << 23);
+	x += 127 << 23;
+	*exp_ptr = x;
+	val = ((-1.0f/3) * t.f + 2) * t.f - 2.0f/3;
+	return (val + log_2);
+}
+
+FFTX_FN_PREFIX
+inline float fast_log (const float val) {
+  return (fast_log2 (val) * 0.69314718f);
+}
+
+FFTX_FN_PREFIX
+inline float fast_log10 (const float val) {
+  return fast_log2(val) / 3.312500f;
+}
+
+FFTX_FN_PREFIX
 inline float fftx_power_to_dB(float a) {
 	/* 10 instead of 20 because of squared signal -- no sqrt(powerp[]) */
-	return a > 0 ? 10.0 * log10f(a) : -INFINITY;
+	return a > 0 ? 10.0 * fast_log10(a) : -INFINITY;
 }
 
 FFTX_FN_PREFIX
