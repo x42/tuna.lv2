@@ -181,40 +181,48 @@ static void render_frontface(TunaUI* ui) {
 	cairo_fill(cr);
 	write_text_full(cr, "C E N T", ui->font[F_S_LARGE], L_CNT_XC, L_CNT_YT + L_CNT_H/2, 0, 2, c_g60);
 
-	for (int cent = -50; cent <= 50 ; cent +=10) {
+	const float cnt_m10 = rintf(L_CNT_XC - L_BAR_W * .1);
+	const float cnt_w10 = rintf(L_BAR_W * .2);
+	cairo_pattern_t* cpat = cairo_pattern_create_linear (cnt_m10 -.5, 0.0, cnt_m10+cnt_w10, 0.0);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.00, .8, .8, .0, .0);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.10, .8, .8, .0, .3);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.25, .0, .8, .0, .3);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.50, .0, .8, .0, .4);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.75, .0, .8, .0, .3);
+	cairo_pattern_add_color_stop_rgba (cpat, 0.90, .8, .8, .0, .3);
+	cairo_pattern_add_color_stop_rgba (cpat, 1.00, .8, .8, .0, .0);
+
+	cairo_set_source (cr, cpat);
+	cairo_rectangle(cr, cnt_m10, L_CNT_YT, cnt_w10 + .5, L_CNT_H);
+	cairo_fill(cr);
+	cairo_pattern_destroy (cpat);
+
+	for (int cent = -40; cent <= 40  ; cent +=5) {
 		char tmp[16];
 		snprintf(tmp, 16, "%+3d", cent);
-		if (cent < 0) CairoSetSouerceRGBA(c_red);
-		else if (cent > 0) CairoSetSouerceRGBA(c_grn);
-		else CairoSetSouerceRGBA(c_glb);
+		if (abs(cent) > 10) CairoSetSouerceRGBA(c_red);
+		else if (abs(cent) > 0) CairoSetSouerceRGBA(c_nyl);
+		else CairoSetSouerceRGBA(c_grn);
 
-		if (abs(cent) < 50) {
-			const double dash[] = {2.0};
-			cairo_save(cr);
-			cairo_set_dash(cr, dash, 1, 0);
-			cairo_move_to(cr, rintf(L_CNT_XC + L_BAR_W * cent / 100.) -.5, L_CNT_YT + 1.5);
-			cairo_line_to(cr, rintf(L_CNT_XC + L_BAR_W * cent / 100.) -.5, L_CNT_YT + L_CNT_H - 1.5);
-			cairo_stroke(cr);
-			cairo_restore(cr);
-		}
-
-#if 0 // cents
-		if (abs(cent) == 20 || abs(cent) == 40) {
-			write_text_full(cr, tmp,
-					ui->font[F_M_SMALL],
-					rint(L_CNT_XC + L_BAR_W * cent / 100.)-.5, L_CNT_YT + L_CNT_H/2, 0 * M_PI, 2, c_g60);
-		}
-#endif
+		float ylen = (cent % 10) ? 4.5 : 1.5 ;
+		const double dash[] = {1.5};
+		cairo_save(cr);
+		cairo_set_dash(cr, dash, 1, 0);
+		cairo_move_to(cr, rintf(L_CNT_XC + L_BAR_W * cent / 100.) -.5, L_CNT_YT + ylen);
+		cairo_line_to(cr, rintf(L_CNT_XC + L_BAR_W * cent / 100.) -.5, L_CNT_YT + L_CNT_H - ylen - .5);
+		cairo_stroke(cr);
+		cairo_restore(cr);
 	}
-	write_text_full(cr, "-50", ui->font[F_M_SMALL],
+	write_text_full(cr, "-45", ui->font[F_M_SMALL],
 			rint(L_CNT_XC + L_BAR_W * -45 / 100.)-.5, L_CNT_YT + L_CNT_H/2, 0 * M_PI, 2, c_g60);
-	write_text_full(cr, "+50", ui->font[F_M_SMALL],
+	write_text_full(cr, "+45", ui->font[F_M_SMALL],
 			rint(L_CNT_XC + L_BAR_W *  45 / 100.)-.5, L_CNT_YT + L_CNT_H/2, 0 * M_PI, 2, c_g60);
 
 	/* Strobe background */
 	CairoSetSouerceRGBA(c_g30);
 	rounded_rectangle (cr, L_BAR_X - 2, L_STB_YC - 12, L_BAR_W + 4 , L_STB_H + 4, 4);
 	cairo_fill(cr);
+	write_text_full(cr, "S T R O B E", ui->font[F_S_LARGE], L_CNT_XC, L_STB_YC, 0, 2, c_g60);
 
 	/* Level background */
 	CairoSetSouerceRGBA(c_g30);
@@ -340,7 +348,6 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 		write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_TUN_YC, 0, 4, c_wht);
 	}
 
-
 	/* footer, Frequency || no-signal */
 	if (ui->p_freq > 0) {
 		snprintf(txt, 255, "%.2fHz", ui->p_freq );
@@ -358,9 +365,33 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 		} else {
 			cairo_set_source_rgba (cr, .8, .0, .0, .7);
 		}
-		cairo_rectangle (cr, L_CNT_XC, L_CNT_YT,
+		cairo_rectangle (cr, L_CNT_XC -.5, L_CNT_YT,
 				L_BAR_W * ui->s_cent / 100., L_CNT_H);
 		cairo_fill(cr);
+		if (fabsf(ui->s_cent) <= 5.0) {
+			/* cent triangles */
+			cairo_set_line_width(cr, 1.0);
+			float x1 = rint(L_CNT_XC - L_BAR_W *.05) -.5;
+			float x2 = rint(L_CNT_XC - L_BAR_W *.05 - L_CNT_H *.7) -.5;
+			cairo_move_to(cr, x1, L_CNT_YT + L_CNT_H *.5);
+			cairo_line_to(cr, x2, L_CNT_YT );
+			cairo_line_to(cr, x2, L_CNT_YT + L_CNT_H);
+			cairo_close_path(cr);
+			cairo_fill_preserve(cr);
+			CairoSetSouerceRGBA(c_blk);
+			cairo_stroke(cr);
+
+			x1 = rint(L_CNT_XC + L_BAR_W *.05) +.5;
+			x2 = rint(L_CNT_XC + L_BAR_W *.05 + L_CNT_H *.7) +.5;
+			cairo_set_source_rgba (cr, .0, .8, .0, .7);
+			cairo_move_to(cr, x1, L_CNT_YT + L_CNT_H *.5);
+			cairo_line_to(cr, x2, L_CNT_YT );
+			cairo_line_to(cr, x2, L_CNT_YT + L_CNT_H);
+			cairo_close_path(cr);
+			cairo_fill_preserve(cr);
+			CairoSetSouerceRGBA(c_blk);
+			cairo_stroke(cr);
+		}
 	}
 
 	/* level bar graph */
