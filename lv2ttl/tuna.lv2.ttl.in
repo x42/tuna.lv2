@@ -150,6 +150,6 @@
     lv2:minimum 0.0;
     lv2:maximum 100.0;
     lv2:portProperty pprop:notOnGUI ;
-  ]
+  ] ;
 	rdfs:comment "Musical instrument tuner with strobe characteristics" ;
   .
