@@ -3,6 +3,7 @@ Tuna.LV2
 
 An musical instrument tuner with strobe characteristics in LV2 plugin format.
 
+Install
 -------
 
 Compiling this plugin requires the LV2 SDK, gnu-make, a c-compiler,
