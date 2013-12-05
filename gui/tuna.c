@@ -438,12 +438,10 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	snprintf(txt, 255, "%-2s%.0f", notename[(int)ui->p_note], ui->p_octave);
 	write_text_full(cr, txt, ui->font[F_M_HUGE], L_NFO_XL, L_NFO_YC, 0, 3, c_wht);
 
-	if (ui->s_cent > -100) {
+	if (fabsf(ui->s_cent) < 100) {
 		snprintf(txt, 255, "%+6.2f\u00A2", ui->s_cent);
-	} else {
-		snprintf(txt, 255, "+-0.00\u00A2");
+		write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_NFO_YC, 0, 1, c_wht);
 	}
-	write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_NFO_YC, 0, 1, c_wht);
 
 	float note = ui->p_note + (ui->p_octave+1) * 12.f;
 	if (note >= 0 && note < 128) {
@@ -992,9 +990,11 @@ port_event(LV2UI_Handle handle,
 			break;
 
 		/* input ports */
-		case TUNA_FREQ_OUT: ui->p_freq = v; break;
 		case TUNA_OCTAVE:   ui->p_octave = v; break;
 		case TUNA_NOTE:     ui->p_note = MAX(0, MIN(11,v)); break;
+		case TUNA_FREQ_OUT: ui->p_freq = v;
+			if (v <= 0) ui->s_cent = 0;
+			break;
 		case TUNA_CENT:     ui->p_cent = v;
 				ui->s_cent += .4 * (v - ui->s_cent) + 1e-12;
 			break;

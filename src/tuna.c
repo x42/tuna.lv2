@@ -188,7 +188,7 @@ typedef struct {
 	/* FFT */
 	struct FFTAnalysis *fftx;
 	bool fft_initialized;
-	int fft_note;
+	float fft_scale_freq;
 	int fft_note_count;
 	bool fftonly_variant;
 	int fft_timeout;
@@ -259,7 +259,7 @@ instantiate(
 	self->rms_omega = 1.0f - expf(-2.0 * M_PI * 15.0 / rate);
 	self->dll_initialized = false;
 	self->fft_initialized = false;
-	self->fft_note = 0;
+	self->fft_scale_freq = 0;
 	self->fft_note_count = 0;
 	self->initialize = !self->midi_variant;
 	self->spectr_active = false;
@@ -483,6 +483,17 @@ static void midi_signal(Tuna *self, uint32_t tme, float freq, float rms) {
 }
 
 
+/* round frequency to the closest note on the given scale.
+ * use midi notation 0..127 for note-names
+ */
+static float freq_to_scale(Tuna *self, const float freq, int *midinote) {
+	const float tuning = *self->p_tuning;
+	/* calculate corresponding note - use midi notation 0..127 */
+	const int note = rintf(12.f * log2f(freq / tuning) + 69.0);
+	if (midinote) *midinote = note;
+	/* ..and round it back to frequency */
+	return tuning * powf(2.0, (note - 69.f) / 12.f);
+}
 
 static void
 run(LV2_Handle handle, uint32_t n_samples)
@@ -511,7 +522,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 	/* input ports */
 	float const * const a_in = self->a_in;
-	const float  tuning = *self->p_tuning;
 	const float  mode   = self->midi_variant ? 0 : *self->p_mode;
 #ifdef OUTPUT_POSTFILTER
 	float * const a_out = self->midi_variant ? NULL : self->a_out;
@@ -537,7 +547,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		freq = mode;
 	} else if (mode <= -1 && mode >= -128) {
 		/* midi-note */
-		freq = tuning * powf(2.0, floorf(-70 - mode) / 12.f);
+		freq = (*self->p_tuning) * powf(2.0, floorf(-70 - mode) / 12.f);
 	} else {
 		/* auto-detect  - run FFT */
 		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
@@ -601,20 +611,17 @@ run(LV2_Handle handle, uint32_t n_samples)
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
-				/* calculate corresponding note - use midi notation 0..127 */
-				const int note = rintf(12.f * log2f(fft_peakfreq / tuning) + 69.0);
-				/* ..and round it back to frequency */
-				const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
+				const float note_freq = freq_to_scale(self, fft_peakfreq, NULL);
 
 				/* keep track of fft stability */
-				if (note == self->fft_note) {
+				if (note_freq == self->fft_scale_freq) {
 					self->fft_note_count+=n_samples;
 				} else {
 					self->fft_note_count = 0;
 				}
-				self->fft_note = note;
+				self->fft_scale_freq = note_freq;
 
-				debug_printf("FFT found peak: %fHz -> midi: %d -> freq: %fHz (%d)\n", fft_peakfreq, note, note_freq, self->fft_note_count);
+				debug_printf("FFT found peak: %fHz -> freq: %fHz (%d)\n", fft_peakfreq, note_freq, self->fft_note_count);
 
 				if (self->fftonly_variant) {
 					if (self->fft_note_count > 1) {
@@ -624,13 +631,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 						self->fft_timeout = 0;
 					}
 				} else
-				if ((note >=0 && note < 128) && freq != note_freq &&
+				if (freq != note_freq &&
 						(   (!self->dll_initialized && self->fft_note_count > 768)
 						 || (self->fft_note_count > 1536 && fabsf(freq - note_freq) > MAX(FFT_FREQ_THESHOLD_MIN, freq * FFT_FREQ_THESHOLD_FAC))
 						 || (self->fft_note_count > self->rate / 8)
 						)
 					 ) {
-					info_printf("FFT adjust %fHz -> %fHz (midi: %d, fft:%fHz) cnt:%d\n", freq, note_freq, note, fft_peakfreq, self->fft_note_count);
+					info_printf("FFT adjust %fHz -> %fHz (fft:%fHz) cnt:%d\n", freq, note_freq, fft_peakfreq, self->fft_note_count);
 					freq = note_freq;
 				}
 			}
@@ -796,32 +803,23 @@ run(LV2_Handle handle, uint32_t n_samples)
 	/* post-processing and data-output */
 	if (detected_count > 0) {
 		/* calculate average of detected frequency */
+		int note;
 		const float freq_avg = detected_freq / (float)detected_count;
-		/* ..and the corresponding note */
-		const int note = rintf(12.f * log2f(freq_avg / tuning) + 69.0);
-		const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
+		/* ..and the corresponding note on the scale */
+		const float note_freq = freq_to_scale(self, freq_avg, &note);
 
 		debug_printf("detected Freq: %.2f (error: %.2f [samples])\n", freq_avg, self->dll_e0);
 
-		/* calculate cent difference */
-		float cent;
-		if (freq_avg < note_freq) {
-			/* cent -100..0 use 2^(−1÷12) = 0.943874313
-			 * cent = (freq_avg - note_freq) / (note_freq - note_freq * 0.943874313f);
-			 */
-			cent = (freq_avg / note_freq - 1.f) / (1.f - 0.943874313f);
-		} else {
-			/* cent  0..100 use 2^(+1÷12) = 1.059463094
-			 * cent = (freq_avg - note_freq) / (note_freq * 1.059463094f - note_freq);
-			 */
-			cent = (freq_avg / note_freq - 1.f) / (1.059463094f - 1.f);
-		}
+		/* calculate cent difference
+		 * One cent is one hundredth part of the semitone in 12-tone equal temperament
+		 */
+		const float cent = 1200.0 * log2(freq_avg / note_freq);
 
 		/* assign output port data */
 	  *self->p_freq_out = freq_avg;
 	  *self->p_octave   = (note/12) -1;
 	  *self->p_note     = note%12;
-	  *self->p_cent     = 100.f * cent;
+	  *self->p_cent     = cent;
 	  *self->p_error    = 100.0 * self->dll_e0 * note_freq / self->rate;
 
 	}
