@@ -58,7 +58,7 @@
 #define L_NFO_XL (100.)
 #define L_NFO_XC (325.)
 
-#define L_TUN_XC (DAWIDTH / 2)
+#define L_TUN_XC (160)
 #define L_TUN_YC (125)
 
 
@@ -68,9 +68,13 @@
 typedef struct {
 	LV2UI_Write_Function write;
 	LV2UI_Controller controller;
+	LV2_Atom_Forge forge;
+	LV2_URID_Map* map;
+	TunaLV2URIs uris;
 
 	RobWidget *hbox, *ctable;
 	RobWidget *darea;
+	RobTkXYp  *xyp;
 
 	RobTkSep  *sep[3];
 	RobTkLbl  *label[4];
@@ -81,7 +85,8 @@ typedef struct {
 	RobTkSelect *sel_mode;
 
 	PangoFontDescription *font[4];
-  cairo_surface_t *frontface;
+	cairo_surface_t *frontface;
+	cairo_surface_t *spect_ann;
 	cairo_pattern_t* meterpattern;
 
 	float p_rms;
@@ -102,6 +107,8 @@ typedef struct {
 
 	bool disable_signals;
 	bool fft_mode;
+	bool spectr_enable;
+
 } TunaUI;
 
 static const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -152,25 +159,60 @@ static int deflect(float val) {
 	return lvl;
 }
 
+static void xy_clip_fn(cairo_t *cr, void *data) {
+	TunaUI* ui = (TunaUI*) data;
+	rounded_rectangle (cr, 10, 10, DAWIDTH - 20, DAHEIGHT - 20, 10);
+	cairo_clip(cr);
+	if (ui->p_freq > 0) {
+		cairo_save(cr);
+		cairo_set_source_rgba (cr, .0, .9, .0, .6);
+		cairo_set_line_width(cr, 3.5);
+		float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .5, 10);
+		cairo_line_to(cr, rintf(x) - .5, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		const double dash[] = {1.5};
+		cairo_set_dash(cr, dash, 1, 0);
+		cairo_set_line_width(cr, 4.0);
+		cairo_set_source_rgba (cr, .2, .8, .0, .6);
+		x = 10 + (DAWIDTH - 20.) * 2.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		x = 10 + (DAWIDTH - 20.) * 4.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		x = 10 + (DAWIDTH - 20.) * 8.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+		cairo_restore(cr);
+	}
+}
+
 static void render_frontface(TunaUI* ui) {
-  cairo_t *cr;
-  if (!ui->frontface) {
-    ui->frontface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, DAWIDTH, DAHEIGHT);
-  }
-  cr = cairo_create(ui->frontface);
+	cairo_t *cr;
+	if (!ui->frontface) {
+		ui->frontface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, DAWIDTH, DAHEIGHT);
+	}
+	cr = cairo_create(ui->frontface);
 	float c_bg[4];
 	get_color_from_theme(1, c_bg);
 	CairoSetSouerceRGBA(c_bg);
-  cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
-  cairo_rectangle (cr, 0, 0, DAWIDTH, DAHEIGHT);
-  cairo_fill (cr);
+	cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+	cairo_rectangle (cr, 0, 0, DAWIDTH, DAHEIGHT);
+	cairo_fill (cr);
 
 	rounded_rectangle (cr, 10, 10, DAWIDTH - 20, DAHEIGHT - 20, 10);
-  CairoSetSouerceRGBA(c_blk);
+	CairoSetSouerceRGBA(c_blk);
 	cairo_fill(cr);
 
-  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-  cairo_set_line_width(cr, 1.0);
+	cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+	cairo_set_line_width(cr, 1.0);
 
 	write_text_full(cr, "The Tuna Tuner Tube",
 			ui->font[F_S_LARGE], DAWIDTH/2, 30, 0, 2, c_wht);
@@ -260,11 +302,76 @@ static void render_frontface(TunaUI* ui) {
 	}
 
 #if 1 /* version info */
-  write_text_full(cr, "x42 tuna " TUNAVERSION, ui->font[F_M_SMALL],
-      15, 20, 1.5 * M_PI, 7, c_g20);
+	write_text_full(cr, "x42 tuna " TUNAVERSION, ui->font[F_M_SMALL],
+			15, 20, 1.5 * M_PI, 7, c_g20);
 #endif
 
-  cairo_destroy(cr);
+	cairo_destroy(cr);
+
+	/* draw spectrogram faceplate */
+
+	robtk_xydraw_set_surface(ui->xyp, NULL);
+	if (ui->spect_ann) {
+		cairo_surface_destroy (ui->spect_ann);
+	}
+	ui->spect_ann = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, DAWIDTH, DAWIDTH);
+	cr = cairo_create (ui->spect_ann);
+
+	CairoSetSouerceRGBA(c_bg);
+	cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+	cairo_rectangle (cr, 0, 0, DAWIDTH, DAHEIGHT);
+	cairo_fill (cr);
+
+	cairo_save(cr);
+	rounded_rectangle (cr, 10, 10, DAWIDTH - 20, DAHEIGHT - 20, 10);
+	CairoSetSouerceRGBA(c_blk);
+	cairo_fill_preserve(cr);
+	cairo_clip(cr);
+
+	cairo_set_line_width (cr, 1.0);
+	cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
+	for (float dB = 6; dB < 92; dB += 6) {
+		char tmp[16];
+		const double dash[] = {3.0, 1.5};
+		cairo_set_dash(cr, dash, 2, 0);
+		sprintf(tmp, "%+0.0fdB", -dB);
+		float y = 10 + (DAHEIGHT - 20.) * dB / 92.;
+		cairo_move_to(cr, 10, rintf(y) + .5);
+		cairo_line_to(cr, DAWIDTH - 10, rintf(y) + .5);
+		cairo_stroke(cr);
+		write_text_full(cr, tmp, ui->font[F_M_SMALL],
+				DAWIDTH - 15, y, 0, 1, c_g60);
+	}
+
+	for (int fq = 50; fq < 1500; fq += 50) {
+		float x = 10 + (DAWIDTH - 20.) * fq / 1500.;
+		const double dash[] = {1.5};
+		if (fq%100) {
+			cairo_set_dash(cr, dash, 1, 0);
+		} else {
+			cairo_set_dash(cr, NULL, 0, 0);
+		}
+
+		cairo_move_to(cr, rintf(x) - .5, 10);
+		cairo_line_to(cr, rintf(x) - .5, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		if (fq%100 == 0 && fq <= 1300) {
+			char tmp[16];
+			if (fq < 1000.0) {
+				sprintf(tmp, "%dHz", fq);
+			} else {
+				sprintf(tmp, "%0.1fkHz", fq/1000.0);
+			}
+			write_text_full(cr, tmp, ui->font[F_M_SMALL],
+					x, 10, 1.5 * M_PI, 1, c_g60);
+		}
+	}
+	cairo_restore(cr);
+	cairo_destroy(cr);
+	robtk_xydraw_set_surface(ui->xyp, ui->spect_ann);
+
+	/* meter pattern */
 
 	cairo_pattern_t* pat = cairo_pattern_create_linear (0.0, 0.0, L_BAR_W, 0.0);
 	cairo_pattern_add_color_stop_rgba (pat, .0,               .0, .0, .0, .0);
@@ -319,16 +426,13 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	/* limit cairo-drawing to exposed area */
 	cairo_rectangle (cr, ev->x, ev->y, ev->width, ev->height);
 	cairo_clip(cr);
-  cairo_set_source_surface(cr, ui->frontface, 0, 0);
-  cairo_paint (cr);
+	cairo_set_source_surface(cr, ui->frontface, 0, 0);
+	cairo_paint (cr);
 
 	cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
 	char txt[255];
 	const float tuning = robtk_spin_get_value(ui->spb_tuning);
 
-	/* settings */
-	snprintf(txt, 255, "@ %5.1fHz\n", tuning);
-	write_text_full(cr, txt, ui->font[F_M_SMALL], L_TUN_XC, L_TUN_YC, 0, 1, c_wht);
 
 	/* HUGE info: note, ocatave, cent */
 	snprintf(txt, 255, "%-2s%.0f", notename[(int)ui->p_note], ui->p_octave);
@@ -344,15 +448,19 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	float note = ui->p_note + (ui->p_octave+1) * 12.f;
 	if (note >= 0 && note < 128) {
 		const float note_freq = tuning * powf(2.0, (note - 69.f) / 12.f);
-		snprintf(txt, 255, "%7.2fHz", note_freq);
-		write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_TUN_YC, 0, 4, c_wht);
+		snprintf(txt, 255, "%7.2fHz @ %5.1fHz", note_freq, tuning);
+	} else {
+		snprintf(txt, 255, "@ %5.1fHz\n", tuning);
 	}
+	/* settings */
+	write_text_full(cr, txt, ui->font[F_M_SMALL], L_TUN_XC, L_TUN_YC, 0, 2, c_wht);
 
 	/* footer, Frequency || no-signal */
 	if (ui->p_freq > 0) {
 		snprintf(txt, 255, "%.2fHz", ui->p_freq );
 		write_text_full(cr, txt,
 				ui->font[F_M_MED], L_FOO_XC, L_FOO_YB, 0, 5, c_wht);
+		//write_text_full(cr, txt, ui->font[F_M_MED], L_NFO_XC, L_TUN_YC, 0, 4, c_wht);
 	} else {
 		write_text_full(cr, " -- no signal -- ",
 				ui->font[F_M_MED], L_FOO_XC, L_FOO_YB, 0, 5, c_g60);
@@ -368,6 +476,7 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 		cairo_rectangle (cr, L_CNT_XC -.5, L_CNT_YT,
 				L_BAR_W * ui->s_cent / 100., L_CNT_H);
 		cairo_fill(cr);
+#if 0
 		if (fabsf(ui->s_cent) <= 5.0) {
 			/* cent triangles */
 			cairo_set_line_width(cr, 1.0);
@@ -392,6 +501,7 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 			CairoSetSouerceRGBA(c_blk);
 			cairo_stroke(cr);
 		}
+#endif
 	}
 
 	/* level bar graph */
@@ -529,10 +639,28 @@ static bool cb_set_tuning (RobWidget* handle, void *data) {
 
 static void ui_disable(LV2UI_Handle handle)
 {
+	TunaUI* ui = (TunaUI*)handle;
+	uint8_t obj_buf[64];
+	if (!ui->spectr_enable) return;
+	lv2_atom_forge_set_buffer(&ui->forge, obj_buf, 64);
+	LV2_Atom_Forge_Frame frame;
+	lv2_atom_forge_frame_time(&ui->forge, 0);
+	LV2_Atom* msg = (LV2_Atom*)lv2_atom_forge_blank(&ui->forge, &frame, 1, ui->uris.ui_off);
+	lv2_atom_forge_pop(&ui->forge, &frame);
+	ui->write(ui->controller, 0, lv2_atom_total_size(msg), ui->uris.atom_eventTransfer, msg);
 }
 
 static void ui_enable(LV2UI_Handle handle)
 {
+	TunaUI* ui = (TunaUI*)handle;
+	uint8_t obj_buf[64];
+	if (!ui->spectr_enable) return;
+	lv2_atom_forge_set_buffer(&ui->forge, obj_buf, 64);
+	LV2_Atom_Forge_Frame frame;
+	lv2_atom_forge_frame_time(&ui->forge, 0);
+	LV2_Atom* msg = (LV2_Atom*)lv2_atom_forge_blank(&ui->forge, &frame, 1, ui->uris.ui_on);
+	lv2_atom_forge_pop(&ui->forge, &frame);
+	ui->write(ui->controller, 0, lv2_atom_total_size(msg), ui->uris.atom_eventTransfer, msg);
 }
 
 static void
@@ -553,14 +681,23 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	robwidget_set_expose_event(ui->darea, expose_event);
 	robwidget_set_size_request(ui->darea, size_request);
 
-  ui->ctable = rob_table_new(/*rows*/3, /*cols*/ 2, FALSE);
+	ui->xyp = robtk_xydraw_new(DAWIDTH, DAHEIGHT);
+	//ui->xyp->rw->position_set = plot_position_right;
+	robtk_xydraw_set_linewidth(ui->xyp, 1.5);
+	robtk_xydraw_set_drawing_mode(ui->xyp, RobTkXY_ymax_zline);
+	robtk_xydraw_set_mapping(ui->xyp, 1./1500., 0, 1./92., 1.0);
+	robtk_xydraw_set_area(ui->xyp, 10, 10, DAWIDTH - 20, DAHEIGHT -20.5);
+	robtk_xydraw_set_clip_callback(ui->xyp, xy_clip_fn, ui);
+	robtk_xydraw_set_color(ui->xyp, 1.0, .0, .2, 1.0);
 
-  ui->sep[0] = robtk_sep_new(TRUE);
-  ui->sep[1] = robtk_sep_new(TRUE);
-  ui->sep[2] = robtk_sep_new(TRUE);
-  robtk_sep_set_linewidth(ui->sep[0], 0);
-  robtk_sep_set_linewidth(ui->sep[1], 0);
-  robtk_sep_set_linewidth(ui->sep[2], 1);
+	ui->ctable = rob_table_new(/*rows*/3, /*cols*/ 2, FALSE);
+
+	ui->sep[0] = robtk_sep_new(TRUE);
+	ui->sep[1] = robtk_sep_new(TRUE);
+	ui->sep[2] = robtk_sep_new(TRUE);
+	robtk_sep_set_linewidth(ui->sep[0], 0);
+	robtk_sep_set_linewidth(ui->sep[1], 0);
+	robtk_sep_set_linewidth(ui->sep[2], 1);
 
 	ui->spb_tuning = robtk_spin_new(220, 880, .5);
 	ui->spb_octave = robtk_spin_new(-1, 10, 1);
@@ -568,22 +705,22 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	ui->sel_mode   = robtk_select_new();
 	ui->sel_note   = robtk_select_new();
 
-  robtk_select_add_item(ui->sel_mode,  0 , "Auto");
-  robtk_select_add_item(ui->sel_mode,  1 , "Freq");
-  robtk_select_add_item(ui->sel_mode,  2 , "Note");
+	robtk_select_add_item(ui->sel_mode,  0 , "Auto");
+	robtk_select_add_item(ui->sel_mode,  1 , "Freq");
+	robtk_select_add_item(ui->sel_mode,  2 , "Note");
 
-  robtk_select_add_item(ui->sel_note,  0 , "C");
-  robtk_select_add_item(ui->sel_note,  1 , "C#");
-  robtk_select_add_item(ui->sel_note,  2 , "D");
-  robtk_select_add_item(ui->sel_note,  3 , "D#");
-  robtk_select_add_item(ui->sel_note,  4 , "E");
-  robtk_select_add_item(ui->sel_note,  5 , "F");
-  robtk_select_add_item(ui->sel_note,  6 , "F#");
-  robtk_select_add_item(ui->sel_note,  7 , "G");
-  robtk_select_add_item(ui->sel_note,  8 , "G#");
-  robtk_select_add_item(ui->sel_note,  9 , "A");
-  robtk_select_add_item(ui->sel_note, 10 , "A#");
-  robtk_select_add_item(ui->sel_note, 11 , "B");
+	robtk_select_add_item(ui->sel_note,  0 , "C");
+	robtk_select_add_item(ui->sel_note,  1 , "C#");
+	robtk_select_add_item(ui->sel_note,  2 , "D");
+	robtk_select_add_item(ui->sel_note,  3 , "D#");
+	robtk_select_add_item(ui->sel_note,  4 , "E");
+	robtk_select_add_item(ui->sel_note,  5 , "F");
+	robtk_select_add_item(ui->sel_note,  6 , "F#");
+	robtk_select_add_item(ui->sel_note,  7 , "G");
+	robtk_select_add_item(ui->sel_note,  8 , "G#");
+	robtk_select_add_item(ui->sel_note,  9 , "A");
+	robtk_select_add_item(ui->sel_note, 10 , "A#");
+	robtk_select_add_item(ui->sel_note, 11 , "B");
 
 	ui->label[0] = robtk_lbl_new("Tuning");
 	ui->label[1] = robtk_lbl_new("Octave");
@@ -591,14 +728,14 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	ui->label[3] = robtk_lbl_new("Freq");
 
 	/* default values */
-  robtk_spin_set_default(ui->spb_tuning, 440);
-  robtk_spin_set_value(ui->spb_tuning, 440);
-  robtk_spin_set_default(ui->spb_freq, 440);
-  robtk_spin_set_value(ui->spb_freq, 440);
-  robtk_spin_set_default(ui->spb_octave, 4);
-  robtk_spin_set_value(ui->spb_octave, 4);
-  robtk_select_set_default_item(ui->sel_note, 9);
-  robtk_select_set_item(ui->sel_note, 9);
+	robtk_spin_set_default(ui->spb_tuning, 440);
+	robtk_spin_set_value(ui->spb_tuning, 440);
+	robtk_spin_set_default(ui->spb_freq, 440);
+	robtk_spin_set_value(ui->spb_freq, 440);
+	robtk_spin_set_default(ui->spb_octave, 4);
+	robtk_spin_set_value(ui->spb_octave, 4);
+	robtk_select_set_default_item(ui->sel_note, 9);
+	robtk_select_set_item(ui->sel_note, 9);
 	robtk_select_set_default_item(ui->sel_mode, 0);
 	robtk_select_set_item(ui->sel_mode, 0);
 
@@ -607,61 +744,64 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	robtk_spin_set_sensitive(ui->spb_freq,   false);
 
 	/* layout alignments */
-  robtk_spin_set_alignment(ui->spb_octave, 0, 0.5);
-  robtk_spin_label_width(ui->spb_octave, -1, 20);
-  robtk_spin_set_label_pos(ui->spb_octave, 2);
-  robtk_spin_set_alignment(ui->spb_tuning, 1.0, 0.5);
-  robtk_spin_label_width(ui->spb_tuning, -1, 0);
-  robtk_spin_set_label_pos(ui->spb_tuning, 2);
-  robtk_spin_set_alignment(ui->spb_freq, 0, 0.5);
-  robtk_spin_label_width(ui->spb_freq, -1, 0);
-  robtk_spin_set_label_pos(ui->spb_freq, 2);
-  robtk_select_set_alignment(ui->sel_note, 0, .5);
+	robtk_spin_set_alignment(ui->spb_octave, 0, 0.5);
+	robtk_spin_label_width(ui->spb_octave, -1, 20);
+	robtk_spin_set_label_pos(ui->spb_octave, 2);
+	robtk_spin_set_alignment(ui->spb_tuning, 1.0, 0.5);
+	robtk_spin_label_width(ui->spb_tuning, -1, 0);
+	robtk_spin_set_label_pos(ui->spb_tuning, 2);
+	robtk_spin_set_alignment(ui->spb_freq, 0, 0.5);
+	robtk_spin_label_width(ui->spb_freq, -1, 0);
+	robtk_spin_set_label_pos(ui->spb_freq, 2);
+	robtk_select_set_alignment(ui->sel_note, 0, .5);
 	robtk_lbl_set_alignment(ui->label[1], 0, .5);
 	robtk_lbl_set_alignment(ui->label[2], 0, .5);
 	robtk_lbl_set_alignment(ui->label[3], 0, .5);
 
-  /* table layout */
-  int row = 0;
+	/* table layout */
+	int row = 0;
 #define TBLADD(WIDGET, X0, X1, Y0, Y1) \
-  rob_table_attach(ui->ctable, WIDGET, X0, X1, Y0, Y1, 2, 2, RTK_SHRINK, RTK_SHRINK);
+	rob_table_attach(ui->ctable, WIDGET, X0, X1, Y0, Y1, 2, 2, RTK_SHRINK, RTK_SHRINK);
 
-  rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[0])
+	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[0])
 			, 0, 2, row, row+1, 2, 2, RTK_SHRINK, RTK_EXANDF);
 	row++;
 
 	TBLADD(robtk_lbl_widget(ui->label[0]), 0, 2, row, row+1);
 	row++;
-  TBLADD(robtk_spin_widget(ui->spb_tuning), 0, 2, row, row+1);
+	TBLADD(robtk_spin_widget(ui->spb_tuning), 0, 2, row, row+1);
 	row++;
 
-  rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[1])
+	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[1])
 			, 0, 2, row, row+1, 2, 2, RTK_SHRINK, RTK_EXANDF);
 	row++;
 
-  rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_mode)
+	rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_mode)
 			, 0, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
 	row++;
 
 	TBLADD(robtk_lbl_widget(ui->label[2]), 0, 1, row, row+1);
-  TBLADD(robtk_select_widget(ui->sel_note), 1, 2, row, row+1);
-  rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_note)
+	TBLADD(robtk_select_widget(ui->sel_note), 1, 2, row, row+1);
+	rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_note)
 			, 1, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
 	row++;
 
 	TBLADD(robtk_lbl_widget(ui->label[1]), 0, 1, row, row+1);
-  TBLADD(robtk_spin_widget(ui->spb_octave), 1, 2, row, row+1);
+	TBLADD(robtk_spin_widget(ui->spb_octave), 1, 2, row, row+1);
 	row++;
 
-  rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[2])
+	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[2])
 			, 1, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
 	row++;
 	TBLADD(robtk_lbl_widget(ui->label[3]), 0, 1, row, row+1);
-  TBLADD(robtk_spin_widget(ui->spb_freq), 1, 2, row, row+1);
+	TBLADD(robtk_spin_widget(ui->spb_freq), 1, 2, row, row+1);
 
 	/* global layout */
 	rob_hbox_child_pack(ui->hbox, ui->darea, FALSE);
-  rob_hbox_child_pack(ui->hbox, ui->ctable, FALSE);
+	if (ui->spectr_enable) {
+		rob_hbox_child_pack(ui->hbox, robtk_xydraw_widget(ui->xyp), FALSE);
+	}
+	rob_hbox_child_pack(ui->hbox, ui->ctable, FALSE);
 
 	/* signal callbacks */
 	robtk_select_set_callback(ui->sel_mode, cb_set_mode, ui);
@@ -711,9 +851,26 @@ instantiate(
 
 	if (!strncmp(plugin_uri, TUNA_URI "one", 31 + 3 )) {
 		ui->fft_mode = false;
+		ui->spectr_enable = false;
+	} else if (!strncmp(plugin_uri, TUNA_URI "two", 31 + 3 )) {
+		ui->fft_mode = false;
+		ui->spectr_enable = true;
 	} else if (!strncmp(plugin_uri, TUNA_URI "fft", 31 + 3 )) {
 		ui->fft_mode = true;
+		ui->spectr_enable = true;
 	} else {
+		free(ui);
+		return NULL;
+	}
+
+	for (int i = 0; features[i]; ++i) {
+		if (!strcmp(features[i]->URI, LV2_URID_URI "#map")) {
+			ui->map = (LV2_URID_Map*)features[i]->data;
+		}
+	}
+
+	if (!ui->map) {
+		fprintf(stderr, "Tuna.lv2 UI: Host does not support urid:map\n");
 		free(ui);
 		return NULL;
 	}
@@ -721,9 +878,12 @@ instantiate(
 	/* initialize private data structure */
 	ui->write      = write_function;
 	ui->controller = controller;
+	map_tuna_uris(ui->map, &ui->uris);
+	lv2_atom_forge_init(&ui->forge, ui->map);
 
 	*widget = toplevel(ui, ui_toplevel);
 	render_frontface(ui);
+	ui_enable(ui);
 	return ui;
 }
 
@@ -737,7 +897,12 @@ static void
 cleanup(LV2UI_Handle handle)
 {
 	TunaUI* ui = (TunaUI*)handle;
+	ui_disable(ui);
+
 	robwidget_destroy(ui->darea);
+	robtk_xydraw_set_surface(ui->xyp, NULL);
+	cairo_surface_destroy (ui->spect_ann);
+	robtk_xydraw_destroy(ui->xyp);
 
 	for (uint32_t i = 0; i < 2; ++i) {
 		robtk_sep_destroy(ui->sep[i]);
@@ -746,15 +911,15 @@ cleanup(LV2UI_Handle handle)
 		robtk_lbl_destroy(ui->label[i]);
 	}
 
-  robtk_spin_destroy(ui->spb_tuning);
-  robtk_spin_destroy(ui->spb_octave);
-  robtk_spin_destroy(ui->spb_freq);
-  robtk_select_destroy(ui->sel_note);
+	robtk_spin_destroy(ui->spb_tuning);
+	robtk_spin_destroy(ui->spb_octave);
+	robtk_spin_destroy(ui->spb_freq);
+	robtk_select_destroy(ui->sel_note);
 	robtk_select_destroy(ui->sel_mode);
 
 	rob_box_destroy(ui->hbox);
 
-  cairo_surface_destroy(ui->frontface);
+	cairo_surface_destroy(ui->frontface);
 	cairo_pattern_destroy(ui->meterpattern);
 
 	for (uint32_t i = 0; i < 4; ++i) {
@@ -771,6 +936,36 @@ port_event(LV2UI_Handle handle,
 		const void*  buffer)
 {
 	TunaUI* ui = (TunaUI*)handle;
+
+	LV2_Atom* atom = (LV2_Atom*)buffer;
+	if (format == ui->uris.atom_eventTransfer
+			&& atom->type == ui->uris.atom_Blank
+		 ) {
+		LV2_Atom_Object* obj = (LV2_Atom_Object*)atom;
+		LV2_Atom *a0 = NULL;
+		LV2_Atom *a1 = NULL;
+		if (
+				obj->body.otype == ui->uris.spectrum
+				&& 2 == lv2_atom_object_get(obj, ui->uris.spec_data_x, &a0, ui->uris.spec_data_y, &a1, NULL)
+				&& a0 && a1
+				&& a0->type == ui->uris.atom_Vector
+				&& a1->type == ui->uris.atom_Vector
+			 )
+		{
+			LV2_Atom_Vector* vof_x = (LV2_Atom_Vector*)LV2_ATOM_BODY(a0);
+			LV2_Atom_Vector* vof_y = (LV2_Atom_Vector*)LV2_ATOM_BODY(a1);
+			if (vof_x->atom.type == ui->uris.atom_Float
+					&& vof_y->atom.type == ui->uris.atom_Float)
+			{
+				const size_t n_elem = (a0->size - sizeof(LV2_Atom_Vector_Body)) / vof_x->atom.size;
+				const float *px = (float*) LV2_ATOM_BODY(&vof_x->atom);
+				const float *py = (float*) LV2_ATOM_BODY(&vof_y->atom);
+				robtk_xydraw_set_points(ui->xyp, n_elem, px, py);
+			}
+		}
+		return;
+	}
+
 	if (format != 0) return;
 	const float v = *(float *)buffer;
 	switch (port_index) {

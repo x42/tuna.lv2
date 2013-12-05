@@ -28,10 +28,6 @@
 #include <stdbool.h>
 
 #include "lv2/lv2plug.in/ns/lv2core/lv2.h"
-#include "lv2/lv2plug.in/ns/ext/atom/atom.h"
-#include "lv2/lv2plug.in/ns/ext/atom/forge.h"
-#include "lv2/lv2plug.in/ns/ext/urid/urid.h"
-#include "lv2/lv2plug.in/ns/ext/midi/midi.h"
 
 #ifndef MIN
 #define MIN(A,B) ( (A) < (B) ? (A) : (B) )
@@ -61,6 +57,9 @@
 
 /* for testing only -- output filtered signal */
 //#define OUTPUT_POSTFILTER
+
+/* use both rising and falling signal edge to track phase */
+#define TWO_EDGES
 
 /* debug */
 #if 0
@@ -196,17 +195,22 @@ typedef struct {
 
 	/* MIDI Out */
 	bool midi_variant;
-  LV2_URID_Map* map;
-  LV2_Atom_Forge forge;
-  LV2_Atom_Forge_Frame frame;
-  LV2_Atom_Sequence* midiout;
+	LV2_URID_Map* map;
+	LV2_Atom_Forge forge;
+	LV2_Atom_Forge_Frame frame;
 	uint8_t m_key, m_vel;
 
 	uint8_t m_stat_key;
 	uint32_t m_stat_cnt;
 
-	LV2_URID atom_Sequence;
-	LV2_URID uri_midi_Event;
+	/* Spectrum */
+	float sp_x[512];
+	float sp_y[512];
+	bool spectr_active;
+
+	LV2_Atom_Sequence* notify; // midi-out, gui notify
+	const LV2_Atom_Sequence* control;
+	TunaLV2URIs uris;
 } Tuna;
 
 static LV2_Handle
@@ -221,27 +225,26 @@ instantiate(
 		return NULL;
 	}
 
+	for (int i=0; features[i]; ++i) {
+		if (!strcmp(features[i]->URI, LV2_URID__map)) {
+			self->map = (LV2_URID_Map*)features[i]->data;
+		}
+	}
+	if (!self->map) {
+		fprintf(stderr, "tuna.lv2 error: Host does not support urid:map\n");
+		free(self);
+		return NULL;
+	}
+
 	self->fftonly_variant = false;
 	if (!strncmp(descriptor->URI, TUNA_URI "one", 31 + 3 )) {
+		self->midi_variant = false;
+	} else if (!strncmp(descriptor->URI, TUNA_URI "two", 31 + 3 )) {
 		self->midi_variant = false;
 	} else if (!strncmp(descriptor->URI, TUNA_URI "fft", 31 + 3 )) {
 		self->midi_variant = false;
 		self->fftonly_variant = true;
 	} else if (!strncmp(descriptor->URI, TUNA_URI "midi", 31 + 4 )) {
-		int i;
-		for (i=0; features[i]; ++i) {
-			if (!strcmp(features[i]->URI, LV2_URID__map)) {
-				self->map = (LV2_URID_Map*)features[i]->data;
-			}
-		}
-		if (!self->map) {
-			fprintf(stderr, "tuna.lv2 error: Host does not support urid:map\n");
-			free(self);
-			return NULL;
-		}
-		self->uri_midi_Event = self->map->map(self->map->handle, LV2_MIDI__MidiEvent);
-		self->atom_Sequence  = self->map->map(self->map->handle, LV2_ATOM__Sequence);
-		lv2_atom_forge_init(&self->forge, self->map);
 		self->midi_variant = true;
 	} else {
 		return NULL;
@@ -259,6 +262,7 @@ instantiate(
 	self->fft_note = 0;
 	self->fft_note_count = 0;
 	self->initialize = !self->midi_variant;
+	self->spectr_active = false;
 
 	self->dll_e0 = self->dll_e2 = 0;
 	self->dll_t1 = self->dll_t0 = 0;
@@ -281,6 +285,9 @@ instantiate(
 	fft_size = MIN(32768, fft_size);
 	fftx_init(self->fftx, fft_size, rate, 0);
 
+	map_tuna_uris(self->map, &self->uris);
+	lv2_atom_forge_init(&self->forge, self->map);
+
 	return (LV2_Handle)self;
 }
 
@@ -293,6 +300,12 @@ connect_port_tuna(
 	Tuna* self = (Tuna*)handle;
 
 	switch ((PortIndexTuna)port) {
+		case TUNA_CONTROL:
+			self->control = (const LV2_Atom_Sequence*)data;
+			break;
+		case TUNA_NOTIFY:
+			self->notify = (LV2_Atom_Sequence*)data;
+			break;
 		case TUNA_AIN:
 			self->a_in  = (float*)data;
 			break;
@@ -342,7 +355,7 @@ connect_port_midi(
 			self->a_in  = (float*)data;
 			break;
 		case MIDI_MOUT:
-			self->midiout = (LV2_Atom_Sequence*)data;
+			self->notify = (LV2_Atom_Sequence*)data;
 			break;
 		case MIDI_TUNING:
 			self->p_tuning = (float*)data;
@@ -350,11 +363,40 @@ connect_port_midi(
 	}
 }
 
+static void tx_spectrum(Tuna *self, struct FFTAnalysis *ft)
+{
+	/* prepare data */
+	uint32_t p = 0;
+	const uint32_t b = ft->data_size * 3000 / ft->rate;
+	for (uint32_t i = 1; i < b && p < 512; i++) {
+		if (ft->power[i] < .00000000063) { // (-92dB)^2
+			continue;
+		}
+		self->sp_x[p] = fftx_freq_at_bin(ft, i);
+		self->sp_y[p] = fftx_power_at_bin(ft, i);
+		p++;
+	}
+	if (p == 0) return;
+
+	LV2_Atom_Forge_Frame frame;
+	lv2_atom_forge_frame_time(&self->forge, 0);
+	lv2_atom_forge_blank(&self->forge, &frame, 1, self->uris.spectrum);
+
+	lv2_atom_forge_property_head(&self->forge, self->uris.spec_data_x, 0);
+	lv2_atom_forge_vector(&self->forge, sizeof(float), self->uris.atom_Float, p, self->sp_x);
+
+	lv2_atom_forge_property_head(&self->forge, self->uris.spec_data_y, 0);
+	lv2_atom_forge_vector(&self->forge, sizeof(float), self->uris.atom_Float, p, self->sp_y);
+
+	lv2_atom_forge_pop(&self->forge, &frame);
+}
+
+
 static void midi_tx(Tuna *self, int64_t tme, uint8_t raw_midi[3]) {
 	LV2_Atom midiatom;
-	midiatom.type = self->uri_midi_Event;
+	midiatom.type = self->uris.midi_Event;
 	midiatom.size = 3;
-  lv2_atom_forge_frame_time(&self->forge, tme);
+	lv2_atom_forge_frame_time(&self->forge, tme);
 	lv2_atom_forge_raw(&self->forge, &midiatom, sizeof(LV2_Atom));
 	lv2_atom_forge_raw(&self->forge, raw_midi, 3);
 	lv2_atom_forge_pad(&self->forge, sizeof(LV2_Atom) + midiatom.size);
@@ -462,11 +504,10 @@ run(LV2_Handle handle, uint32_t n_samples)
 		*self->p_cent     = 0;
 		*self->p_error    = -100;
 	}
-	if (self->midi_variant) {
-		const uint32_t capacity = self->midiout->atom.size;
-		lv2_atom_forge_set_buffer(&self->forge, (uint8_t*)self->midiout, capacity);
-		lv2_atom_forge_sequence_head(&self->forge, &self->frame, 0);
-	}
+
+	const uint32_t capacity = self->notify->atom.size;
+	lv2_atom_forge_set_buffer(&self->forge, (uint8_t*)self->notify, capacity);
+	lv2_atom_forge_sequence_head(&self->forge, &self->frame, 0);
 
 	/* input ports */
 	float const * const a_in = self->a_in;
@@ -500,6 +541,32 @@ run(LV2_Handle handle, uint32_t n_samples)
 	} else {
 		/* auto-detect  - run FFT */
 		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
+	}
+
+
+	/* Process incoming events from GUI */
+	if (self->control) {
+		LV2_Atom_Event* ev = lv2_atom_sequence_begin(&(self->control)->body);
+		/* for each message from UI... */
+		while(!lv2_atom_sequence_is_end(&(self->control)->body, (self->control)->atom.size, ev)) {
+			/* .. only look at atom-events.. */
+			if (ev->body.type == self->uris.atom_Blank) {
+				const LV2_Atom_Object* obj = (LV2_Atom_Object*)&ev->body;
+				/* interpret atom-objects: */
+				if (obj->body.otype == self->uris.ui_on) {
+					/* UI was activated */
+					self->spectr_active = true;
+				} else if (obj->body.otype == self->uris.ui_off) {
+					/* UI was closed */
+					self->spectr_active = false;
+				}
+			}
+			ev = lv2_atom_sequence_next(ev);
+		}
+	}
+
+	if (fft_ran_this_cycle && self->spectr_active) {
+		tx_spectrum(self, self->fftx);
 	}
 
 	/* process every sample */
@@ -565,7 +632,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 					 ) {
 					info_printf("FFT adjust %fHz -> %fHz (midi: %d, fft:%fHz) cnt:%d\n", freq, note_freq, note, fft_peakfreq, self->fft_note_count);
 					freq = note_freq;
-					//self->dll_e2 = self->rate / (fft_peakfreq-.1) / 2.f;
 				}
 			}
 		}
@@ -643,7 +709,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 		 * and a 2nd order phase-locked loop
 		 */
 		if (   (signal >= 0 && prev_smpl < 0)
+#ifdef TWO_EDGES
 				|| (signal <= 0 && prev_smpl > 0)
+#endif
 				) {
 
 			if (!self->dll_initialized) {
@@ -651,7 +719,11 @@ run(LV2_Handle handle, uint32_t n_samples)
 				/* re-initialize DLL */
 				self->dll_initialized = true;
 				self->dll_e0 = self->dll_t0 = 0;
+#ifdef TWO_EDGES
 				self->dll_e2 = self->rate / self->tuna_fc / 2.f;
+#else
+				self->dll_e2 = self->rate / self->tuna_fc;
+#endif
 				self->dll_t1 = self->monotonic_cnt + n + self->dll_e2;
 			} else {
 				/* phase 'error' = detected_phase - expected_phase */
@@ -662,8 +734,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 				self->dll_t1 += self->dll_b * self->dll_e0 + self->dll_e2;
 				self->dll_e2 += self->dll_c * self->dll_e0;
 
+#ifdef TWO_EDGES
 				const float dfreq0 = self->rate / (self->dll_t1 - self->dll_t0) / 2.f;
 				const float dfreq2 = self->rate / (self->dll_e2) / 2.f;
+#else
+				const float dfreq0 = self->rate / (self->dll_t1 - self->dll_t0);
+				const float dfreq2 = self->rate / (self->dll_e2);
+#endif
 				debug_printf("detected Freq: %.2f flt: %.2f (error: %.2f [samples]) diff:%f)\n",
 						dfreq0, dfreq2, self->dll_e0, (self->dll_t1 - self->dll_t0) - self->dll_e2);
 
@@ -712,6 +789,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 	if (self->midi_variant) {
 		//lv2_atom_forge_pop(&self->forge, &self->frame);
 		return;
+	} else {
+		lv2_atom_forge_pop(&self->forge, &self->frame);
 	}
 
 	/* post-processing and data-output */
@@ -814,21 +893,25 @@ static const LV2_Descriptor descriptor ## ID = { \
 
 mkdesc_tuna(0, "one")
 mkdesc_tuna(1, "one_gtk")
-mkdesc_tuna(2, "fft")
-mkdesc_tuna(3, "fft_gtk")
-mkdesc_midi(4, "midi")
+mkdesc_tuna(2, "two")
+mkdesc_tuna(3, "two_gtk")
+mkdesc_tuna(4, "fft")
+mkdesc_tuna(5, "fft_gtk")
+mkdesc_midi(6, "midi")
 
 LV2_SYMBOL_EXPORT
 const LV2_Descriptor*
 lv2_descriptor(uint32_t index)
 {
 	switch (index) {
-    case  0: return &descriptor0;
-    case  1: return &descriptor1;
-    case  2: return &descriptor2;
-    case  3: return &descriptor3;
-    case  4: return &descriptor4;
-    default: return NULL;
+		case  0: return &descriptor0;
+		case  1: return &descriptor1;
+		case  2: return &descriptor2;
+		case  3: return &descriptor3;
+		case  4: return &descriptor4;
+		case  5: return &descriptor4;
+		case  6: return &descriptor4;
+		default: return NULL;
 	}
 }
 

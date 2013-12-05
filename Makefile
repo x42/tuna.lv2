@@ -153,6 +153,8 @@ $(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
+	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@INSTANCE@/fft/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
@@ -160,6 +162,8 @@ ifneq ($(BUILDOPENGL), no)
 endif
 ifneq ($(BUILDGTK), no)
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
+	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@INSTANCE@/fft/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
@@ -182,11 +186,15 @@ ifneq ($(BUILDOPENGL), no)
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UI@/ui_gl/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@/[Spectrum]/g;s/@UI@/ui_gl/g" \
+	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 	sed "s/@INSTANCE@/fft/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@/ [FFT]/g;s/@UI@/ui_gl/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 endif
 ifneq ($(BUILDGTK), no)
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ GTK/g;s/@UI@/ui_gtk/g" \
+	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ [Spectrum]GTK/g;s/@UI@/ui_gtk/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 	sed "s/@INSTANCE@/fft/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ [FFT] GTK/g;s/@UI@/ui_gtk/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl

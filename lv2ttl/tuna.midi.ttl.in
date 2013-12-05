@@ -6,6 +6,7 @@
   doap:maintainer <http://gareus.org/rgareus#me> ;
   doap:name "Tuna Midi@NAME_SUFFIX@";
   lv2:optionalFeature lv2:hardRTCapable ;
+  lv2:requiredFeature urid:map ;
   lv2:port
   [
     a lv2:AudioPort ,

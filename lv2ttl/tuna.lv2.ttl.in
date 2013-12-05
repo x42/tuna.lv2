@@ -6,24 +6,45 @@
   doap:maintainer <http://gareus.org/rgareus#me> ;
   doap:name "Instrument Tuner@NAME_SUFFIX@";
   lv2:optionalFeature lv2:hardRTCapable ;
-	ui:ui @LV2NAME@:@UI@ ;
+  lv2:requiredFeature urid:map ;
+  ui:ui @LV2NAME@:@UI@ ;
   lv2:port
   [
+    a atom:AtomPort ,
+      lv2:InputPort ;
+    atom:bufferType atom:Sequence ;
+    lv2:designation lv2:control ;
+    lv2:index 0 ;
+    lv2:symbol "control" ;
+    lv2:name "Control" ;
+    rdfs:comment "GUI to plugin communication"
+  ] , [
+    a atom:AtomPort ,
+      lv2:OutputPort ;
+    atom:bufferType atom:Sequence ;
+    lv2:designation lv2:control ;
+    lv2:index 1 ;
+    lv2:symbol "notify" ;
+    lv2:name "Notify" ;
+    # 2 * 512 * sizeof(float) + LV2-Atoms
+    rsz:minimumSize 4352;
+    rdfs:comment "Plugin to GUI communication"
+  ] , [
     a lv2:AudioPort ,
       lv2:InputPort ;
-    lv2:index 0 ;
+    lv2:index 2 ;
     lv2:symbol "in" ;
     lv2:name "Audio Input" ;
   ] , [
     a lv2:AudioPort ,
       lv2:OutputPort ;
-    lv2:index 1 ;
+    lv2:index 3 ;
     lv2:symbol "out" ;
     lv2:name "Audio output" ;
   ] , [
     a lv2:ControlPort ,
       lv2:InputPort ;
-    lv2:index 2 ;
+    lv2:index 4 ;
     lv2:symbol "mode" ;
     lv2:name "Mode" ;
     lv2:default 0.0 ;
@@ -38,54 +59,54 @@
   ] , [
     a lv2:ControlPort ,
       lv2:InputPort ;
-    lv2:index 3 ;
+    lv2:index 5 ;
     lv2:symbol "tuning" ;
     lv2:name "Tuning A440" ;
     lv2:default 440.0 ;
     lv2:minimum 220.0 ;
     lv2:maximum 880.0;
-		units:unit units:hz;
+    units:unit units:hz;
     lv2:scalePoint [ rdfs:label "standard"; rdf:value 440.0 ; ] ;
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 4 ;
+    lv2:index 6 ;
     lv2:symbol "rms" ;
     lv2:name "Signal Level (RMS)" ;
     lv2:minimum -100.0;
     lv2:maximum -0.0;
-		units:unit units:db;
+    units:unit units:db;
     #lv2:portProperty pprop:logarithmic;
-    lv2:scalePoint [ rdfs:label "detection threshold"; rdf:value -60.0 ; ] ;
+    lv2:scalePoint [ rdfs:label "detection threshold"; rdf:value -65.0 ; ] ;
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 5 ;
+    lv2:index 7 ;
     lv2:symbol "freq_out" ;
     lv2:name "Detected Frequency" ;
     lv2:minimum 0.0;
     lv2:maximum 10000.0;
-		units:unit units:hz;
+    units:unit units:hz;
     lv2:scalePoint [ rdfs:label "no signal"; rdf:value 0.0 ; ] ;
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 6 ;
+    lv2:index 8 ;
     lv2:symbol "octave" ;
     lv2:name "Detected Octave" ;
     lv2:minimum -1.0;
     lv2:maximum 10.0;
     lv2:portProperty lv2:integer;
-		units:unit units:oct;
+    units:unit units:oct;
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 7 ;
+    lv2:index 9 ;
     lv2:symbol "note" ;
     lv2:name "Detected Note" ;
     lv2:minimum 0.0;
     lv2:maximum 12.0;
-		units:unit units:semitone12TET;
+    units:unit units:semitone12TET;
     lv2:portProperty lv2:integer;
     lv2:portProperty lv2:enumeration;
     lv2:scalePoint [ rdfs:label "C";  rdf:value  0.0 ; ] ;
@@ -103,9 +124,9 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 8 ;
+    lv2:index 10 ;
     lv2:symbol "cent" ;
-    lv2:name "Cent F/Fc" ;
+    lv2:name "Cent" ;
     lv2:minimum -50.0;
     lv2:maximum 50.0;
     lv2:scalePoint [ rdfs:label "+-0"; rdf:value 0.0 ; ] ;
@@ -114,7 +135,7 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 9 ;
+    lv2:index 11 ;
     lv2:symbol "accuracy" ;
     lv2:name "Note Stability" ;
     lv2:minimum -100.0;
@@ -123,11 +144,12 @@
   ] , [
     a lv2:ControlPort ,
       lv2:OutputPort ;
-    lv2:index 10 ;
+    lv2:index 12 ;
     lv2:symbol "strobetoui" ;
     lv2:name "StrobeToUi" ;
     lv2:minimum 0.0;
     lv2:maximum 100.0;
-		lv2:portProperty pprop:notOnGUI ;
+    lv2:portProperty pprop:notOnGUI ;
   ]
+	rdfs:comment "Musical instrument tuner with strobe characteristics"
   .
