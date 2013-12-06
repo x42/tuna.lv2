@@ -48,7 +48,7 @@
  * -70dBFS = (10^(.05 * -70))^2 = 0.0000001
  * -90dBFS = (10^(.05 * -70))^2 = 0.000000001
  */
-#define RMS_SIGNAL_THRESHOLD     (0.0000002f)
+#define RMS_SIGNAL_THRESHOLD     (0.0000001f)
 
 /* use FFT signal if tracked freq & FFT-freq differ by more than */
 #define FFT_FREQ_THESHOLD_FAC (.10f)
@@ -124,15 +124,19 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
 			 ) {
 
 			int o = fftx_scan_overtones(ft, ft->power[i] * .0001, i * 2, 2);
-			if (o > 2  && o > octave) {
+			if (o > octave
+					|| (ft->power[i] > threshold * 100)
+					) {
 				if (ft->power[i] > peak_dat) {
 					peak_dat = ft->power[i];
 					fundamental = i;
 					octave = o;
 					/* only prefer higher 'fundamental' if it's louder than a /usual/ 1st overtone.
 					 */
-					threshold = peak_dat * 20; // ~26dB
-					//break;
+					//if (o > 2) threshold = peak_dat * 100;  // 20dB
+					//if (o > 2) threshold = peak_dat * 60; // ~ 17.7dB = 20*log(sqrt(60))
+					if (o > 2) threshold = peak_dat * 20; // ~ 13.0dB
+					//if (o > 16) break;
 				}
 			}
 		}
@@ -140,7 +144,7 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
 
 	debug_printf("fun: bin: %d octave: %d freq: %.1fHz th-fact: %f\n",
 			fundamental, octave, fftx_freq_at_bin(ft, fundamental), threshold / abs_threshold);
-	if (octave < 4) { return 0; }
+	if (octave == 0) { return 0; }
 	return fftx_freq_at_bin(ft, fundamental);
 }
 
@@ -607,7 +611,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .003));
+			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .0003));
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
@@ -672,7 +676,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 			/* re-initialize filter */
 			bandpass_setup(&self->fb, self->rate, self->tuna_fc
-					, MAX(10, self->tuna_fc * .25) // TODO tweak value for midi.
+					, MAX(10, self->tuna_fc * .10) // TODO tweak value for midi.
 					, 4 /*th order butterworth */);
 			self->filter_init = 16;
 		}
@@ -701,10 +705,10 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
-		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .003 : .01)) {
+		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .0003 : .001)) {
 			debug_printf("signal too low after filter: %f %f\n",
-					20.*fast_log10(sqrt(rms_signal)),
-					20.*fast_log10(sqrt(rms_postfilter)));
+					10.*fast_log10(2.f *rms_signal),
+					10.*fast_log10(2.f *rms_postfilter));
 			self->dll_initialized = false;
 			prev_smpl = 0;
 			//midi_signal(self, n, 0, -4); // TODO re-enable w/much lower threshold
@@ -832,8 +836,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 	/* report input level
 	 * NB. 20 *log10f(sqrt(x)) == 10 * log10f(x) */
-	*self->p_rms = (rms_signal > .0000000001f) ? 10. * fast_log10(rms_signal) : -100;
-	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * fast_log10(rms_postfilter) : -100;
+	*self->p_rms = (rms_signal > .0000000001f) ? 10. * fast_log10(2 * rms_signal) : -100;
+	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * fast_log10(2 * rms_postfilter) : -100;
 
 	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 

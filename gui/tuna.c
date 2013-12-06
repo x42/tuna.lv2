@@ -327,6 +327,15 @@ static void render_frontface(TunaUI* ui) {
 	CairoSetSouerceRGBA(c_blk);
 	cairo_fill_preserve(cr);
 	cairo_clip(cr);
+	cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+
+	{
+		float y0 = 10 + (DAHEIGHT - 20.) * 70 / 92.;
+		float y1 = 10 + (DAHEIGHT - 20.) * 92 / 92.;
+		cairo_set_source_rgba(cr, 0.2, 0.2, 0.4, 0.5);
+		cairo_rectangle (cr, 0, y0, DAWIDTH, y1-y0);
+		cairo_fill(cr);
+	}
 
 	cairo_set_line_width (cr, 1.0);
 	cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
