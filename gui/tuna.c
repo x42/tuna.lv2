@@ -165,35 +165,7 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 	cairo_clip(cr);
 	if (ui->p_freq > 0) {
 		cairo_save(cr);
-		cairo_set_source_rgba (cr, .0, .9, .0, .6);
-		cairo_set_line_width(cr, 3.5);
-		float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
-		cairo_move_to(cr, rintf(x) - .5, 10);
-		cairo_line_to(cr, rintf(x) - .5, DAHEIGHT - 10);
-		cairo_stroke(cr);
-
-		const double dash[] = {1.5};
-		cairo_set_dash(cr, dash, 1, 0);
-		cairo_set_line_width(cr, 4.0);
-		cairo_set_source_rgba (cr, .2, .8, .0, .6);
-		x = 10 + (DAWIDTH - 20.) * 2.0 * ui->p_freq / 1500.;
-		cairo_move_to(cr, rintf(x) - .0, 10);
-		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
-		cairo_stroke(cr);
-
-		x = 10 + (DAWIDTH - 20.) * 4.0 * ui->p_freq / 1500.;
-		cairo_move_to(cr, rintf(x) - .0, 10);
-		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
-		cairo_stroke(cr);
-
-		x = 10 + (DAWIDTH - 20.) * 8.0 * ui->p_freq / 1500.;
-		cairo_move_to(cr, rintf(x) - .0, 10);
-		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
-		cairo_stroke(cr);
-		cairo_restore(cr);
-
 #if 1
-		cairo_save(cr);
 		if (ui->s_rms > -70) {
 			const float y0 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms) / 92.;
 			const float y1 = 10 + (DAHEIGHT - 20.) * MIN(-ui->s_rms + 30, 70) / 92.;
@@ -235,8 +207,34 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 			cairo_rectangle (cr, 0, y1, DAWIDTH, y2-y1);
 			cairo_fill(cr);
 		}
-		cairo_restore(cr);
 #endif
+
+		cairo_set_source_rgba (cr, .0, .9, .0, .6);
+		cairo_set_line_width(cr, 3.5);
+		float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .5, 10);
+		cairo_line_to(cr, rintf(x) - .5, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		const double dash[] = {1.5};
+		cairo_set_dash(cr, dash, 1, 0);
+		cairo_set_line_width(cr, 4.0);
+		cairo_set_source_rgba (cr, .2, .8, .0, .6);
+		x = 10 + (DAWIDTH - 20.) * 2.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		x = 10 + (DAWIDTH - 20.) * 4.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+
+		x = 10 + (DAWIDTH - 20.) * 8.0 * ui->p_freq / 1500.;
+		cairo_move_to(cr, rintf(x) - .0, 10);
+		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
+		cairo_stroke(cr);
+		cairo_restore(cr);
 	}
 }
 
