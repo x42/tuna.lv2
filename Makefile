@@ -8,7 +8,7 @@ LIBDIR ?= lib
 
 EXTERNALUI?=yes
 KXURI?=yes
-RW=robtk/
+RW?=robtk/
 ###############################################################################
 LV2DIR ?= $(PREFIX)/$(LIBDIR)/lv2
 
