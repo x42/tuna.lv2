@@ -191,6 +191,52 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
 		cairo_stroke(cr);
 		cairo_restore(cr);
+
+#if 1
+		cairo_save(cr);
+		if (ui->s_rms > -70) {
+			const float y0 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms) / 92.;
+			const float y1 = 10 + (DAHEIGHT - 20.) * MIN(-ui->s_rms + 30, 70) / 92.;
+			cairo_set_source_rgba(cr, 0.6, 0.6, 0.8, 0.5);
+			const double dash[] = {1.5};
+			cairo_set_line_width(cr, 1.5);
+			cairo_set_dash(cr, dash, 1, 0);
+			cairo_move_to(cr, 0, rint(y0)-.5);
+			cairo_line_to(cr, DAWIDTH, rint(y0)-.5);
+			cairo_stroke(cr);
+			cairo_set_dash(cr, NULL, 0, 0);
+			cairo_set_source_rgba(cr, 0.1, 0.4, 0.1, 0.3);
+			cairo_rectangle (cr, 0, y0, DAWIDTH, y1-y0);
+			cairo_fill(cr);
+		}
+		float pp = -100;
+		for (uint32_t d=0; d < ui->xyp->n_points; ++d) {
+			if (fabsf(ui->xyp->points_x[d] - ui->p_freq) < 10 && ui->xyp->points_y[d] > pp
+					) pp = ui->xyp->points_y[d];
+		}
+		if (pp > -70) {
+			const float y0 = 10 + (DAHEIGHT - 20.) * (-pp) / 92.;
+			const float y1 = 10 + (DAHEIGHT - 20.) * (-pp - 13) / 92.;
+			const float y2 = 10 + (DAHEIGHT - 20.) * (-pp - 23) / 92.;
+			float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
+			cairo_set_line_width(cr, 1.0);
+			cairo_set_source_rgba(cr, 0.8, 0.8, 0.8, 0.8);
+			cairo_move_to(cr, rintf(x) - 3.5, rintf(y0) - 3);
+			cairo_line_to(cr, rintf(x) + 2.5, rintf(y0) + 3);
+			cairo_stroke(cr);
+			cairo_move_to(cr, rintf(x) + 2.5, rintf(y0) - 3);
+			cairo_line_to(cr, rintf(x) - 3.5, rintf(y0) + 3);
+			cairo_stroke(cr);
+
+			cairo_set_source_rgba(cr, 0.5, 0.5, 0.1, 0.3);
+			cairo_rectangle (cr, 0, y0, DAWIDTH, y1-y0);
+			cairo_fill(cr);
+			cairo_set_source_rgba(cr, 0.4, 0.1, 0.1, 0.3);
+			cairo_rectangle (cr, 0, y1, DAWIDTH, y2-y1);
+			cairo_fill(cr);
+		}
+		cairo_restore(cr);
+#endif
 	}
 }
 

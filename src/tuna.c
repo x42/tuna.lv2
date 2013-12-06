@@ -544,19 +544,27 @@ run(LV2_Handle handle, uint32_t n_samples)
 	uint32_t detected_count = 0;
 	bool fft_ran_this_cycle = false;
 	bool fft_proc_this_cycle = false;
+	bool fft_active = false;
 
 	/* operation mode */
 	if (mode > 0 && mode < 10000) {
 		/* fixed user-specified frequency */
 		freq = mode;
+		fft_proc_this_cycle = true;
+		fft_active = false;
 	} else if (mode <= -1 && mode >= -128) {
 		/* midi-note */
 		freq = (*self->p_tuning) * powf(2.0, floorf(-70 - mode) / 12.f);
+		fft_proc_this_cycle = true;
+		fft_active = false;
 	} else {
 		/* auto-detect  - run FFT */
-		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
+		fft_active = true;
 	}
 
+	if (fft_active || self->spectr_active) {
+		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
+	}
 
 	/* Process incoming events from GUI */
 	if (self->control) {
