@@ -834,7 +834,6 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	row++;
 
 	TBLADD(robtk_lbl_widget(ui->label[2]), 0, 1, row, row+1);
-	TBLADD(robtk_select_widget(ui->sel_note), 1, 2, row, row+1);
 	rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_note)
 			, 1, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
 	row++;
