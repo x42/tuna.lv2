@@ -746,6 +746,7 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 
 	ui->xyp = robtk_xydraw_new(DAWIDTH, DAHEIGHT);
 	//ui->xyp->rw->position_set = plot_position_right;
+	robtk_xydraw_set_alignment(ui->xyp, 0, 0);
 	robtk_xydraw_set_linewidth(ui->xyp, 1.5);
 	robtk_xydraw_set_drawing_mode(ui->xyp, RobTkXY_ymax_zline);
 	robtk_xydraw_set_mapping(ui->xyp, 1./1500., 0, 1./92., 1.0);
@@ -859,11 +860,11 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	TBLADD(robtk_spin_widget(ui->spb_freq), 1, 2, row, row+1);
 
 	/* global layout */
-	rob_hbox_child_pack(ui->hbox, ui->darea, FALSE);
+	rob_hbox_child_pack(ui->hbox, ui->darea, FALSE, FALSE);
 	if (ui->spectr_enable) {
-		rob_hbox_child_pack(ui->hbox, robtk_xydraw_widget(ui->xyp), FALSE);
+		rob_hbox_child_pack(ui->hbox, robtk_xydraw_widget(ui->xyp), FALSE, FALSE);
 	}
-	rob_hbox_child_pack(ui->hbox, ui->ctable, FALSE);
+	rob_hbox_child_pack(ui->hbox, ui->ctable, FALSE, FALSE);
 
 	/* signal callbacks */
 	robtk_select_set_callback(ui->sel_mode, cb_set_mode, ui);
