@@ -48,7 +48,7 @@
  * -70dBFS = (10^(.05 * -70))^2 = 0.0000001
  * -90dBFS = (10^(.05 * -70))^2 = 0.000000001
  */
-#define RMS_SIGNAL_THRESHOLD     (0.0000001f)
+//#define RMS_SIGNAL_THRESHOLD     (0.0000001f)
 
 /* use FFT signal if tracked freq & FFT-freq differ by more than */
 #define FFT_FREQ_THESHOLD_FAC (.10f)
@@ -82,7 +82,8 @@ void debug_printf (const char *fmt,...) {}
 #include "fft.c"
 
 static int fftx_scan_overtones(struct FFTAnalysis *ft,
-		const float threshold, uint32_t bin, uint32_t octave) {
+		const float threshold, uint32_t bin, uint32_t octave,
+		const float v_oct2) {
 	const float scan  = MAX(2, (float) bin * .1f);
 	float peak_dat = 0;
 	uint32_t peak_pos = 0;
@@ -102,13 +103,13 @@ static int fftx_scan_overtones(struct FFTAnalysis *ft,
 	if (peak_pos > 0) {
 		octave *= 2;
 		if (octave <= 16) {
-			octave = fftx_scan_overtones(ft, threshold * .003, peak_pos * 2, octave);
+			octave = fftx_scan_overtones(ft, threshold * v_oct2, peak_pos * 2, octave, v_oct2);
 		}
 	}
 	return octave;
 }
 
-static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
+static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold, const float v_ovr, const float v_fun, const float v_oct, const float v_ovt) {
 	/* find lowest peak above threshold */
 	uint32_t fundamental = 0;
 	uint32_t octave = 0;
@@ -123,9 +124,9 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
 				&& ft->power[i] > ft->power[i+1]
 			 ) {
 
-			int o = fftx_scan_overtones(ft, ft->power[i] * .0001, i * 2, 2);
+			int o = fftx_scan_overtones(ft, ft->power[i] * v_oct, i * 2, 2, v_ovt);
 			if (o > octave
-					|| (ft->power[i] > threshold * 100)
+					|| (ft->power[i] > threshold * v_ovr)
 					) {
 				if (ft->power[i] > peak_dat) {
 					peak_dat = ft->power[i];
@@ -135,7 +136,8 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold) {
 					 */
 					//if (o > 2) threshold = peak_dat * 100;  // 20dB
 					//if (o > 2) threshold = peak_dat * 60; // ~ 17.7dB = 20*log(sqrt(60))
-					if (o > 2) threshold = peak_dat * 20; // ~ 13.0dB
+					//if (o > 2) threshold = peak_dat * 20; // ~ 13.0dB
+					if (o > 2) threshold = peak_dat * v_fun; // ~ 13.0dB
 					//if (o > 16) break;
 				}
 			}
@@ -167,6 +169,14 @@ typedef struct {
 	float* p_error;
 	float* p_strobe;
 
+	float* p_t_rms;
+	float* p_t_flt;
+	float* p_t_fft;
+	float* p_t_ovr;
+	float* p_t_fun;
+	float* p_t_oct;
+	float* p_t_ovt;
+
 	/* internal state */
 	double rate;
 	struct FilterBank fb;
@@ -181,6 +191,15 @@ typedef struct {
 	float rms_omega;
 	float rms_signal;
 	float rms_postfilter;
+
+	/* port thresholds */
+	float t_rms, v_rms;
+	float t_flt, v_flt;
+	float t_fft, v_fft;
+	float t_ovr, v_ovr;
+	float t_fun, v_fun;
+	float t_oct, v_oct;
+	float t_ovt, v_ovt;
 
 	/* DLL */
 	bool dll_initialized;
@@ -342,6 +361,27 @@ connect_port_tuna(
 			break;
 		case TUNA_STROBE:
 			self->p_strobe = (float*)data;
+			break;
+		case TUNA_T_RMS:
+			self->p_t_rms = (float*)data;
+			break;
+		case TUNA_T_FLT:
+			self->p_t_flt = (float*)data;
+			break;
+		case TUNA_T_FFT:
+			self->p_t_fft = (float*)data;
+			break;
+		case TUNA_T_OVR:
+			self->p_t_ovr = (float*)data;
+			break;
+		case TUNA_T_FUN:
+			self->p_t_fun = (float*)data;
+			break;
+		case TUNA_T_OCT:
+			self->p_t_oct = (float*)data;
+			break;
+		case TUNA_T_OVT:
+			self->p_t_ovt = (float*)data;
 			break;
 	}
 }
@@ -531,13 +571,29 @@ run(LV2_Handle handle, uint32_t n_samples)
 	float * const a_out = self->midi_variant ? NULL : self->a_out;
 #endif
 
+	/* get thesholds */
+#define GET_THRESHOLD(VAR) \
+	if (*self->p_t_ ## VAR != self->t_ ## VAR) { \
+		self->t_ ## VAR = *self->p_t_ ## VAR; \
+		self->v_ ## VAR = pow(10, .1 * self->t_ ## VAR); \
+	} \
+	const float v_ ## VAR = self->v_ ## VAR;
+
+	GET_THRESHOLD(rms)
+	GET_THRESHOLD(flt)
+	GET_THRESHOLD(fft)
+	GET_THRESHOLD(ovr)
+	GET_THRESHOLD(fun)
+	GET_THRESHOLD(oct)
+	GET_THRESHOLD(ovt)
+
 	/* localize variables */
 	float prev_smpl = self->prev_smpl;
 	float rms_signal = self->rms_signal;
 	float rms_postfilter = self->rms_postfilter;
 	const float rms_omega  = self->rms_omega;
 	float freq = self->tuna_fc;
-	const float rms_threshold = self->midi_variant ? RMS_SIGNAL_THRESHOLD * 5 : RMS_SIGNAL_THRESHOLD;
+	const float rms_threshold = self->midi_variant ? v_rms * 5 : v_rms;
 
 	/* initialize local vars */
 	float    detected_freq = 0;
@@ -619,7 +675,11 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(RMS_SIGNAL_THRESHOLD, rms_signal * .0003));
+#if 0
+			const float fft_peakfreq = fftx_find_note(self->fftx, MAX(v_rms, rms_signal * v_fft), v_ovr, v_fun, v_oct, v_ovt);
+#else
+			const float fft_peakfreq = fftx_find_note(self->fftx, rms_signal * v_fft, v_ovr, v_fun, v_oct, v_ovt);
+#endif
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
@@ -713,7 +773,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
-		if (rms_postfilter < rms_signal * ((self->tuna_fc < 50) ? .0003 : .001)) {
+		if (rms_postfilter < rms_signal *
+#if 0
+				((self->tuna_fc < 50) ? .0003 : .001)
+#else
+				v_flt
+#endif
+				) {
 			debug_printf("signal too low after filter: %f %f\n",
 					10.*fast_log10(2.f *rms_signal),
 					10.*fast_log10(2.f *rms_postfilter));

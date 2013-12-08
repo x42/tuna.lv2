@@ -40,6 +40,13 @@ typedef enum {
 	TUNA_CENT,
 	TUNA_ERROR,
 	TUNA_STROBE,
+	TUNA_T_RMS,
+	TUNA_T_FLT,
+	TUNA_T_FFT,
+	TUNA_T_OVR,
+	TUNA_T_FUN,
+	TUNA_T_OCT,
+	TUNA_T_OVT,
 } PortIndexTuna;
 
 
