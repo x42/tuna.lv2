@@ -96,7 +96,7 @@ static int fftx_scan_overtones(struct FFTAnalysis *ft,
 			 ) {
 			peak_pos = i;
 			peak_dat = ft->power[i];
-			debug_printf("ovt: bin %d oct %d th-fact: %f\n", i, octave, ft->power[i]/ threshold);
+			debug_printf("ovt: bin %d oct %d th-fact: %f\n", i, octave, 10.0 * fast_log10(ft->power[i]/ threshold));
 			break;
 		}
 	}
@@ -117,7 +117,7 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold, c
 	const uint32_t brkpos = ft->data_size * 6000 / ft->rate;
 	float threshold = abs_threshold;
 
-	for (uint32_t i = 2; i < brkpos; ++i) {
+	for (uint32_t i = 1; i < brkpos; ++i) {
 		if (
 				ft->power[i] > threshold
 				&& ft->power[i] > ft->power[i-1]
@@ -125,6 +125,8 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold, c
 			 ) {
 
 			int o = fftx_scan_overtones(ft, ft->power[i] * v_oct, i * 2, 2, v_ovt);
+			debug_printf("Candidate (%d) %f Hz -> %d overtones\n", i, fftx_freq_at_bin(ft, i) , o);
+
 			if (o > octave
 					|| (ft->power[i] > threshold * v_ovr)
 					) {
@@ -144,8 +146,8 @@ static float fftx_find_note(struct FFTAnalysis *ft, const float abs_threshold, c
 		}
 	}
 
-	debug_printf("fun: bin: %d octave: %d freq: %.1fHz th-fact: %f\n",
-			fundamental, octave, fftx_freq_at_bin(ft, fundamental), threshold / abs_threshold);
+	debug_printf("fun: bin: %d octave: %d freq: %.1fHz th-fact: %fdB\n",
+			fundamental, octave, fftx_freq_at_bin(ft, fundamental), 10 * fast_log10(threshold / abs_threshold));
 	if (octave == 0) { return 0; }
 	return fftx_freq_at_bin(ft, fundamental);
 }
@@ -295,7 +297,7 @@ instantiate(
 	if (self->fftonly_variant) {
 		fft_size = MAX(8192, rate / 8);
 	} else {
-		fft_size = MAX(4096, rate / 15);
+		fft_size = MAX(6144, rate / 15);
 	}
 	/* round up to next power of two */
 	fft_size--;
@@ -575,7 +577,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 #define GET_THRESHOLD(VAR) \
 	if (*self->p_t_ ## VAR != self->t_ ## VAR) { \
 		self->t_ ## VAR = *self->p_t_ ## VAR; \
-		self->v_ ## VAR = pow(10, .1 * self->t_ ## VAR); \
+		self->v_ ## VAR = powf(10, .1 * self->t_ ## VAR); \
 	} \
 	const float v_ ## VAR = self->v_ ## VAR;
 

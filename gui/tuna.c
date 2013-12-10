@@ -169,6 +169,7 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 	rounded_rectangle (cr, 10, 10, DAWIDTH - 20, DAHEIGHT - 20, 10);
 	cairo_clip(cr);
 
+	/* global abs. threshold */
 	{
 		float y0 = 10 + (DAHEIGHT - 20.) * robtk_spin_get_value(ui->spb_debug[0]) / -92.;
 		float y1 = 10 + (DAHEIGHT - 20.) * 92 / 92.;
@@ -177,14 +178,17 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 		cairo_fill(cr);
 	}
 
+	cairo_save(cr);
 	if (ui->p_freq > 0) {
-		cairo_save(cr);
+		/* note detected */
 
 		if (ui->s_rms > -90) {
+		/* RMS value and post-filter threshold */
+			float xf = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
 			const float y0 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms) / 92.;
 			const float y1 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms - robtk_spin_get_value(ui->spb_debug[1])) / 92.;
 			const float y2 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms - robtk_spin_get_value(ui->spb_debug[2])) / 92.;
-			cairo_set_source_rgba(cr, 0.6, 0.6, 0.8, 0.5);
+			cairo_set_source_rgba(cr, 0.6, 0.6, 0.8, 0.6);
 			const double dash[] = {1.5};
 			cairo_set_line_width(cr, 1.5);
 			cairo_set_dash(cr, dash, 1, 0);
@@ -196,40 +200,55 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 			cairo_set_source_rgba(cr, 0.1, 0.5, 0.1, 0.3);
 			cairo_rectangle (cr, 0, y0, DAWIDTH, y1-y0);
 			cairo_fill(cr);
-			cairo_set_source_rgba(cr, 0.1, 0.4, 0.4, 0.3);
-			cairo_rectangle (cr, 0, y0, DAWIDTH, y2-y0);
+			cairo_set_source_rgba(cr, 0.1, 0.5, 0.4, 0.4);
+			cairo_rectangle (cr, xf-5.5, y0, 10, y2-y0);
 			cairo_fill(cr);
 		}
 
-		float pp = -100;
-		for (uint32_t d=0; d < ui->xyp->n_points; ++d) {
-			if (fabsf(ui->xyp->points_x[d] - ui->p_freq) < 10 && ui->xyp->points_y[d] > pp
-					) pp = ui->xyp->points_y[d];
+		if (robtk_rbtn_get_active(ui->disp[1])) {
+			float pp = -100;
+			for (uint32_t d=0; d < ui->xyp->n_points; ++d) {
+				if (fabsf(ui->xyp->points_x[d] - ui->p_freq) < 10 && ui->xyp->points_y[d] > pp
+						) pp = ui->xyp->points_y[d];
+			}
+			if (pp > -85) {
+				const float y0 = 10 - (DAHEIGHT - 20.) * (pp) / 92.;
+				const float y1 = 10 - (DAHEIGHT - 20.) * (pp + robtk_spin_get_value(ui->spb_debug[4])) / 92.;
+				const float y2 = 10 - (DAHEIGHT - 20.) * (pp + robtk_spin_get_value(ui->spb_debug[3]) + robtk_spin_get_value(ui->spb_debug[4])) / 92.;
+				const float y3 = 10 - (DAHEIGHT - 20.) * (pp + robtk_spin_get_value(ui->spb_debug[5])) / 92.;
+				const float y4 =  0 - (DAHEIGHT - 20.) * (robtk_spin_get_value(ui->spb_debug[6])) / 92.;
+				float x = (DAWIDTH - 20.) * ui->p_freq / 1500.;
+				float x0 = 10 + x;
+
+				cairo_set_source_rgba(cr, 0.5, 0.1, 0.1, 0.3);
+				cairo_rectangle (cr, x0, y0, DAWIDTH-x0, y1-y0);
+				cairo_fill(cr);
+				cairo_set_source_rgba(cr, 0.8, 0.1, 0.1, 0.3);
+				cairo_rectangle (cr, x0, y0, DAWIDTH-x0, y2-y0);
+				cairo_fill(cr);
+				cairo_set_source_rgba(cr, 0.1, 0.1, 0.6, 0.4);
+				cairo_rectangle (cr, x0, y0, x, y3-y0);
+				cairo_fill(cr);
+				cairo_set_source_rgba(cr, 0.2, 0.1, 0.6, 0.3);
+				cairo_rectangle (cr, x0+x, y0, DAWIDTH-x0-x, y4+y3-y0);
+				cairo_fill(cr);
+				cairo_set_source_rgba(cr, 0.2, 0.1, 0.6, 0.3);
+				cairo_rectangle (cr, x0+3.f*x, y0, DAWIDTH-x0-3*x, 2.f*y4+y3-y0);
+				cairo_fill(cr);
+
+				/* draw cross */
+				cairo_set_line_width(cr, 1.0);
+				cairo_set_source_rgba(cr, 0.9, 0.9, 0.9, 0.8);
+				cairo_move_to(cr, rintf(x0) - 3.5, rintf(y0) - 3);
+				cairo_line_to(cr, rintf(x0) + 2.5, rintf(y0) + 3);
+				cairo_stroke(cr);
+				cairo_move_to(cr, rintf(x0) + 2.5, rintf(y0) - 3);
+				cairo_line_to(cr, rintf(x0) - 3.5, rintf(y0) + 3);
+				cairo_stroke(cr);
+			}
 		}
-		if (pp > -80) {
-			const float y0 = 10 + (DAHEIGHT - 20.) * (-pp) / 92.;
-			const float y1 = 10 + (DAHEIGHT - 20.) * (-pp - robtk_spin_get_value(ui->spb_debug[3])) / 92.;
-			const float y2 = 10 + (DAHEIGHT - 20.) * (-pp - robtk_spin_get_value(ui->spb_debug[5])) / 92.;
-			float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
 
-			cairo_set_source_rgba(cr, 0.5, 0.1, 0.1, 0.3);
-			cairo_rectangle (cr, 0, y0, DAWIDTH, y1-y0);
-			cairo_fill(cr);
-			cairo_set_source_rgba(cr, 0.4, 0.1, 0.4, 0.3);
-			cairo_rectangle (cr, 0, y0, DAWIDTH, y2-y0);
-			cairo_fill(cr);
-
-			/* draw cross */
-			cairo_set_line_width(cr, 1.0);
-			cairo_set_source_rgba(cr, 0.9, 0.9, 0.9, 0.8);
-			cairo_move_to(cr, rintf(x) - 3.5, rintf(y0) - 3);
-			cairo_line_to(cr, rintf(x) + 2.5, rintf(y0) + 3);
-			cairo_stroke(cr);
-			cairo_move_to(cr, rintf(x) + 2.5, rintf(y0) - 3);
-			cairo_line_to(cr, rintf(x) - 3.5, rintf(y0) + 3);
-			cairo_stroke(cr);
-		}
-
+		/* octave lines */
 		cairo_set_source_rgba (cr, .0, .9, .0, .6);
 		cairo_set_line_width(cr, 3.5);
 		float x = 10 + (DAWIDTH - 20.) * ui->p_freq / 1500.;
@@ -255,15 +274,16 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 		cairo_move_to(cr, rintf(x) - .0, 10);
 		cairo_line_to(cr, rintf(x) - .0, DAHEIGHT - 10);
 		cairo_stroke(cr);
-		cairo_restore(cr);
 	} else {
+#if 0
 		rounded_rectangle (cr, 10, 10, DAWIDTH - 20, DAHEIGHT - 20, 10);
-		cairo_set_source_rgba(cr, 0.4, 0.4, 0.4, 0.5);
+		cairo_set_source_rgba(cr, 0.4, 0.4, 0.4, 0.2);
 		cairo_fill(cr);
+#endif
 
 		if (ui->s_rms > -80) {
 			const float y0 = 10 + (DAHEIGHT - 20.) * (-ui->s_rms) / 92.;
-			cairo_set_source_rgba(cr, 0.6, 0.6, 0.8, 0.5);
+			cairo_set_source_rgba(cr, 0.6, 0.6, 0.8, 0.6);
 			const double dash[] = {1.5};
 			cairo_set_line_width(cr, 1.5);
 			cairo_set_dash(cr, dash, 1, 0);
@@ -272,7 +292,7 @@ static void xy_clip_fn(cairo_t *cr, void *data) {
 			cairo_stroke(cr);
 		}
 	}
-
+	cairo_restore(cr);
 }
 
 static void render_frontface(TunaUI* ui) {
@@ -868,13 +888,13 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	robtk_spin_set_default(SPB, VAL); \
 	robtk_spin_set_value(SPB, VAL);
 
-	SPIN_DFTNVAL(ui->spb_debug[0], -65)
-	SPIN_DFTNVAL(ui->spb_debug[1], -35)
-	SPIN_DFTNVAL(ui->spb_debug[2], -35)
-	SPIN_DFTNVAL(ui->spb_debug[3],  13)
-	SPIN_DFTNVAL(ui->spb_debug[4],  20)
-	SPIN_DFTNVAL(ui->spb_debug[5], -40)
-	SPIN_DFTNVAL(ui->spb_debug[6], -25)
+	SPIN_DFTNVAL(ui->spb_debug[0], -75)
+	SPIN_DFTNVAL(ui->spb_debug[1], -45)
+	SPIN_DFTNVAL(ui->spb_debug[2], -40)
+	SPIN_DFTNVAL(ui->spb_debug[3],  20)
+	SPIN_DFTNVAL(ui->spb_debug[4],   5)
+	SPIN_DFTNVAL(ui->spb_debug[5], -30)
+	SPIN_DFTNVAL(ui->spb_debug[6], -15)
 
 	robtk_select_add_item(ui->sel_mode,  0 , "Auto");
 	robtk_select_add_item(ui->sel_mode,  1 , "Freq");
