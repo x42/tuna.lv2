@@ -111,7 +111,6 @@ typedef struct {
 	float strobe_phase;
 
 	bool disable_signals;
-	bool fft_mode;
 	bool spectr_enable;
 
 } TunaUI;
@@ -393,14 +392,10 @@ static void render_frontface(TunaUI* ui) {
 	write_text_full(cr, "signal level", ui->font[F_M_SMALL], L_CNT_XC, L_LVL_YT + L_LVL_H/2, 0, 2, c_g60);
 
 	/* Accuracy background */
-	if (!ui->fft_mode) {
-		CairoSetSouerceRGBA(c_g30);
-		rounded_rectangle (cr, L_BAR_X - 2, L_ERR_YT - 2, L_BAR_W + 4 , L_ERR_H + 4, 4);
-		cairo_fill(cr);
-		write_text_full(cr, "accuracy", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
-	} else {
-		write_text_full(cr, "[FFT only mode]", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
-	}
+	CairoSetSouerceRGBA(c_g30);
+	rounded_rectangle (cr, L_BAR_X - 2, L_ERR_YT - 2, L_BAR_W + 4 , L_ERR_H + 4, 4);
+	cairo_fill(cr);
+	write_text_full(cr, "accuracy", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
 
 #if 1 /* version info */
 	write_text_full(cr, "x42 tuna " TUNAVERSION, ui->font[F_M_SMALL],
@@ -623,7 +618,7 @@ static bool expose_event(RobWidget* handle, cairo_t* cr, cairo_rectangle_t *ev)
 	}
 
 	/* accuracy bar graph */
-	if (ui->p_freq == 0 || ui->fft_mode) {
+	if (ui->p_freq == 0) {
 		; // no data
 	} else if (fabsf(ui->s_error) < 10) {
 		cairo_set_source_rgba (cr, .0, .8, .0, .4);
@@ -727,6 +722,10 @@ static bool cb_disp_changed (RobWidget* handle, void *data) {
 		robwidget_hide(ui->sel_note->rw, false);
 		robwidget_hide(ui->sel_mode->rw, false);
 		for (uint32_t i = 0; i < 7; ++i) {
+#ifdef GTK_BACKEND
+		gtk_widget_set_no_show_all(ui->spb_debug[i]->rw->c, false);
+		gtk_widget_set_no_show_all(ui->lbl_debug[i]->rw->c, false);
+#endif
 			robwidget_show(ui->spb_debug[i]->rw, false);
 			robwidget_show(ui->lbl_debug[i]->rw, false);
 		}
@@ -955,50 +954,56 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	}
 	/* table layout */
 	int row = 0;
-#define TBLADD(WIDGET, X0, X1, Y0, Y1) \
+#define TBLADDSS(WIDGET, X0, X1, Y0, Y1) \
 	rob_table_attach(ui->ctable, WIDGET, X0, X1, Y0, Y1, 2, 2, RTK_SHRINK, RTK_SHRINK);
 
-	TBLADD(ui->btnbox, 0, 2, row, row+1); row++;
+#define TBLADDES(WIDGET, X0, X1, Y0, Y1) \
+	rob_table_attach(ui->ctable, WIDGET, X0, X1, Y0, Y1, 2, 2, RTK_EXANDF, RTK_SHRINK);
 
-	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[0])
-			, 0, 2, row, row+1, 2, 2, RTK_SHRINK, RTK_EXANDF);
-	row++;
+	if (ui->spectr_enable) {
+		TBLADDES(ui->btnbox, 0, 2, row, row+1); row++;
 
-	for (uint32_t i = 0; i < 7; ++i) {
-		robtk_spin_set_alignment(ui->spb_debug[i], 0, 0.5);
-		robtk_lbl_set_alignment(ui->lbl_debug[i], 0, 0.5);
-		TBLADD(robtk_lbl_widget(ui->lbl_debug[i]), 0, 1, row, row+1);
-		TBLADD(robtk_spin_widget(ui->spb_debug[i]), 1, 2, row, row+1);
+		rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[0])
+				, 0, 2, row, row+1, 2, 2, RTK_SHRINK, RTK_EXANDF);
 		row++;
-		robtk_spin_set_callback(ui->spb_debug[i], cb_set_debug, ui);
+
+		for (uint32_t i = 0; i < 7; ++i) {
+			robtk_spin_set_alignment(ui->spb_debug[i], 0, 0.5);
+			robtk_lbl_set_alignment(ui->lbl_debug[i], 0, 0.5);
+			TBLADDES(robtk_lbl_widget(ui->lbl_debug[i]), 0, 1, row, row+1);
+			TBLADDES(robtk_spin_widget(ui->spb_debug[i]), 1, 2, row, row+1);
+#ifdef GTK_BACKEND
+			gtk_widget_set_no_show_all(ui->spb_debug[i]->rw->c, true);
+			gtk_widget_set_no_show_all(ui->lbl_debug[i]->rw->c, true);
+#endif
+			row++;
+			robtk_spin_set_callback(ui->spb_debug[i], cb_set_debug, ui);
+		}
 	}
 
-	TBLADD(robtk_lbl_widget(ui->label[0]), 0, 1, row, row+1);
-	TBLADD(robtk_spin_widget(ui->spb_tuning), 1, 2, row, row+1);
+	TBLADDSS(robtk_lbl_widget(ui->label[0]), 0, 1, row, row+1);
+	TBLADDSS(robtk_spin_widget(ui->spb_tuning), 1, 2, row, row+1);
 	row++;
 
 	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[1])
 			, 0, 2, row, row+1, 2, 2, RTK_SHRINK, RTK_EXANDF);
 	row++;
 
-	rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_mode)
-			, 0, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
+	TBLADDES(robtk_select_widget(ui->sel_mode), 0, 2, row, row+1);
 	row++;
 
-	TBLADD(robtk_lbl_widget(ui->label[2]), 0, 1, row, row+1);
-	rob_table_attach(ui->ctable, robtk_select_widget(ui->sel_note)
-			, 1, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
+	TBLADDSS(robtk_lbl_widget(ui->label[2]), 0, 1, row, row+1);
+	TBLADDES(robtk_select_widget(ui->sel_note), 1, 2, row, row+1);
 	row++;
 
-	TBLADD(robtk_lbl_widget(ui->label[1]), 0, 1, row, row+1);
-	TBLADD(robtk_spin_widget(ui->spb_octave), 1, 2, row, row+1);
+	TBLADDSS(robtk_lbl_widget(ui->label[1]), 0, 1, row, row+1);
+	TBLADDSS(robtk_spin_widget(ui->spb_octave), 1, 2, row, row+1);
 	row++;
 
-	rob_table_attach(ui->ctable, robtk_sep_widget(ui->sep[2])
-			, 1, 2, row, row+1, 2, 2, RTK_EXANDF, RTK_SHRINK);
+	TBLADDES(robtk_sep_widget(ui->sep[2]), 1, 2, row, row+1);
 	row++;
-	TBLADD(robtk_lbl_widget(ui->label[3]), 0, 1, row, row+1);
-	TBLADD(robtk_spin_widget(ui->spb_freq), 1, 2, row, row+1);
+	TBLADDSS(robtk_lbl_widget(ui->label[3]), 0, 1, row, row+1);
+	TBLADDSS(robtk_spin_widget(ui->spb_freq), 1, 2, row, row+1);
 
 	/* global layout */
 	rob_hbox_child_pack(ui->hbox, ui->darea, FALSE, FALSE);
@@ -1020,7 +1025,10 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	ui->font[2] = pango_font_description_from_string("Mono 48");
 	ui->font[3] = pango_font_description_from_string("Mono 8");
 
-	robtk_rbtn_set_active(ui->disp[0], TRUE);
+	if (ui->spectr_enable) {
+		robtk_rbtn_set_active(ui->disp[0], TRUE);
+		cb_disp_changed(NULL, ui);
+	}
 	return ui->hbox;
 }
 
@@ -1056,13 +1064,8 @@ instantiate(
 	*widget = NULL;
 
 	if (!strncmp(plugin_uri, TUNA_URI "one", 31 + 3 )) {
-		ui->fft_mode = false;
 		ui->spectr_enable = false;
 	} else if (!strncmp(plugin_uri, TUNA_URI "two", 31 + 3 )) {
-		ui->fft_mode = false;
-		ui->spectr_enable = true;
-	} else if (!strncmp(plugin_uri, TUNA_URI "fft", 31 + 3 )) {
-		ui->fft_mode = true;
 		ui->spectr_enable = true;
 	} else {
 		free(ui);

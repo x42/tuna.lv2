@@ -7,9 +7,5 @@
     ui:plugin @LV2NAME@:one ;
     lv2:symbol "notify" ;
     ui:notifyType atom:Blank ;
-  ] , [
-    ui:plugin @LV2NAME@:fft ;
-    lv2:symbol "notify" ;
-    ui:notifyType atom:Blank ;
   ]
   .

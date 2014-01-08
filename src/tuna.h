@@ -50,19 +50,12 @@ typedef enum {
 } PortIndexTuna;
 
 
-typedef enum {
-	MIDI_AIN = 0,
-	MIDI_MOUT,
-	MIDI_TUNING,
-} PortIndexMidi;
-
 typedef struct {
 	LV2_URID atom_Blank;
 	LV2_URID atom_Vector;
 	LV2_URID atom_Float;
 	LV2_URID atom_Int;
 	LV2_URID atom_eventTransfer;
-	LV2_URID midi_Event;
 
 	LV2_URID spectrum;
 	LV2_URID spec_data_x;
@@ -78,7 +71,6 @@ map_tuna_uris(LV2_URID_Map* map, TunaLV2URIs* uris) {
 	uris->atom_Float         = map->map(map->handle, LV2_ATOM__Float);
 	uris->atom_Int           = map->map(map->handle, LV2_ATOM__Int);
 	uris->atom_eventTransfer = map->map(map->handle, LV2_ATOM__eventTransfer);
-	uris->midi_Event         = map->map(map->handle, LV2_MIDI__MidiEvent);
 
 	uris->spectrum           = map->map(map->handle, TUNA_URI "#_spectrum");
 	uris->spec_data_x        = map->map(map->handle, TUNA_URI "#_data_x");
