@@ -20,6 +20,10 @@
 #include <sys/types.h>
 #include <fftw3.h>
 
+#ifndef MIN
+#define MIN(A,B) ( (A) < (B) ? (A) : (B) )
+#endif
+
 /******************************************************************************
  * internal FFT abstraction
  */
@@ -72,15 +76,16 @@ static void ft_analyze(struct FFTAnalysis *ft) {
 	}
 
 	fftwf_execute(ft->fftplan);
+
+	memcpy(ft->phase_h, ft->phase, sizeof(float) * ft->data_size);
 	ft->power[0] = ft->fft_out[0] * ft->fft_out[0];
+	ft->phase[0] = 0;
 
 #define FRe (ft->fft_out[i])
 #define FIm (ft->fft_out[ft->window_size-i])
 	for (uint32_t i = 1; i < ft->data_size - 1; ++i) {
 		ft->power[i] = (FRe * FRe) + (FIm * FIm);
-		float phase = atan2f(FIm, FRe);
-		ft->phase_h[i] = ft->phase[i];
-		ft->phase[i] = phase;
+		ft->phase[i] = atan2f(FIm, FRe);
 	}
 #undef FRe
 #undef FIm
@@ -95,11 +100,15 @@ static void ft_analyze(struct FFTAnalysis *ft) {
 
 FFTX_FN_PREFIX
 void fftx_reset(struct FFTAnalysis *ft) {
-	memset(ft->power, 0, ft->data_size * sizeof(float));
-	memset(ft->phase, 0, ft->data_size * sizeof(float));
-	memset(ft->phase_h, 0, ft->data_size * sizeof(float));
-	memset(ft->ringbuf, 0, ft->window_size * sizeof(float));
-	memset(ft->fft_out, 0, ft->window_size * sizeof(float));
+	for (uint32_t i = 0; i < ft->data_size; ++i) {
+		ft->power[i] = 0;
+		ft->phase[i] = 0;
+		ft->phase_h[i] = 0;
+	}
+	for (uint32_t i = 0; i < ft->window_size; ++i) {
+		ft->ringbuf[i] = 0;
+		ft->fft_out[i] = 0;
+	}
 	ft->rboff = 0;
 	ft->smps = 0;
 	ft->step = 0;
@@ -119,14 +128,15 @@ void fftx_init(struct FFTAnalysis *ft, uint32_t window_size, double rate, double
 	ft->phasediff_step = M_PI / ft->data_size;
 	ft->phasediff_bin = 0;
 
-	ft->ringbuf = (float *) calloc(window_size, sizeof(float));
+	ft->ringbuf = (float *) malloc(window_size * sizeof(float));
 	ft->fft_in  = (float *) fftwf_malloc(sizeof(float) * window_size);
 	ft->fft_out = (float *) fftwf_malloc(sizeof(float) * window_size);
-	ft->power   = (float *) calloc(ft->data_size, sizeof(float));
-	ft->phase   = (float *) calloc(ft->data_size, sizeof(float));
-	ft->phase_h = (float *) calloc(ft->data_size, sizeof(float));
+	ft->power   = (float *) malloc(ft->data_size * sizeof(float));
+	ft->phase   = (float *) malloc(ft->data_size * sizeof(float));
+	ft->phase_h = (float *) malloc(ft->data_size * sizeof(float));
 
-	memset(ft->fft_out, 0, sizeof(float) * window_size);
+	fftx_reset(ft);
+
 	ft->fftplan = fftwf_plan_r2r_1d(window_size, ft->fft_in, ft->fft_out, FFTW_R2HC, FFTW_MEASURE);
 }
 
@@ -144,8 +154,8 @@ void fftx_free(struct FFTAnalysis *ft) {
 	free(ft);
 }
 
-FFTX_FN_PREFIX
-int fftx_run(struct FFTAnalysis *ft,
+static
+int _fftx_run(struct FFTAnalysis *ft,
 		const uint32_t n_samples, float const * const data)
 {
 	assert(n_samples <= ft->window_size);
@@ -194,6 +204,25 @@ int fftx_run(struct FFTAnalysis *ft,
 	return 0;
 }
 
+FFTX_FN_PREFIX
+int fftx_run(struct FFTAnalysis *ft,
+		const uint32_t n_samples, float const * const data)
+{
+	if (n_samples <= ft->window_size) {
+		return _fftx_run(ft, n_samples, data);
+	}
+
+	int rv = -1;
+	uint32_t n = 0;
+	while (n < n_samples) {
+		uint32_t step = MIN(ft->window_size, n_samples - n);
+		if (!_fftx_run(ft, step, &data[n])) rv = 0;
+		n += step;
+	}
+	return rv;
+}
+
+
 /*****************************************************************************
  * convenient access functions
  */
@@ -230,7 +259,7 @@ inline float fast_log10 (const float val) {
 FFTX_FN_PREFIX
 inline float fftx_power_to_dB(float a) {
 	/* 10 instead of 20 because of squared signal -- no sqrt(powerp[]) */
-	return a > 0 ? 10.0 * fast_log10(a) : -INFINITY;
+	return a > 1e-12 ? 10.0 * fast_log10(a) : -INFINITY;
 }
 
 FFTX_FN_PREFIX
