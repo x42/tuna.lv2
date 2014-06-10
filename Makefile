@@ -112,7 +112,7 @@ override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DTUNAVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
 
 LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
-LOADLIBES=`pkg-config --libs fftw3f` -lm
+LOADLIBES=`pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
 
 GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
 GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
@@ -194,6 +194,7 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/tuna.c \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES)
+	strip -x -X $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
 -include $(RW)robtk.mk
 
