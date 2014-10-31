@@ -5,6 +5,7 @@ OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -O3
 PREFIX ?= /usr/local
 CFLAGS ?= -g -Wall -Wno-unused-function
 LIBDIR ?= lib
+STRIP  ?= strip
 
 EXTERNALUI?=yes
 KXURI?=yes
@@ -77,10 +78,6 @@ ifeq ($(shell pkg-config --exists lv2 || echo no), no)
   $(error "LV2 SDK was not found")
 endif
 
-ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
-  $(error "fftw3f library was not found")
-endif
-
 ifeq ($(shell pkg-config --atleast-version=1.4 lv2 || echo no), no)
   $(error "LV2 SDK needs to be version 1.4 or later")
 endif
@@ -116,8 +113,37 @@ endif
 override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DTUNAVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
 
-LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
-LOADLIBES=`pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
+ifneq ($(shell test -f fftw-3.3.4/.libs/libfftw3f.a || echo no), no)
+  LV2CFLAGS=$(CFLAGS) -Ifftw-3.3.4/api
+  LOADLIBES=fftw-3.3.4/.libs/libfftw3f.a -lm
+else
+  ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
+    $(error "fftw3f library was not found")
+  endif
+  FFTWA=`pkg-config --variable=libdir fftw3f`/libfftw3f.a
+  ifeq ($(shell test -f $(FFTWA) || echo no), no)
+    FFTWA=`pkg-config --libs fftw3f`
+  endif
+  ifeq ($(shell pkg-config --atleast-version=99.99.99 fftw3f || echo no), no)
+  # https://github.com/FFTW/fftw3/issues/16
+  $(warning "**********************************************************")
+  $(warning "           the fftw3 library is not thread-safe           ")
+  $(warning "**********************************************************")
+  $(info "These plugins may cause crashes when used in a plugin-host")
+  $(info "where libfftw3f symbols are mapped in the global namespace.")
+  $(info "Neither these plugins nor the host has control over possible")
+  $(info "other plugins calling the fftw planner simultaneously.")
+  $(info "Consider statically linking these plugins against a custom build")
+  $(info "of libfftw3f.a built with -fvisibility=hidden to avoid this issue.")
+  $(warning "")
+  $(warning "**********************************************************")
+  $(warning "     run   ./static_fft.sh    prior to make to do so.     ")
+  $(warning "**********************************************************")
+  $(warning "")
+  endif
+  LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
+  $(eval LOADLIBES=$(FFTWA) -lm)
+endif
 
 GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
 GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
@@ -199,7 +225,7 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/tuna.c \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES)
-	strip -x -X $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
+	$(STRIP) -x -X $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
 -include $(RW)robtk.mk
 
