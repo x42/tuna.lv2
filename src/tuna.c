@@ -384,7 +384,7 @@ static void tx_spectrum(Tuna *self, struct FFTAnalysis *ft)
 
 	LV2_Atom_Forge_Frame frame;
 	lv2_atom_forge_frame_time(&self->forge, 0);
-	lv2_atom_forge_blank(&self->forge, &frame, 1, self->uris.spectrum);
+	x_forge_object(&self->forge, &frame, 1, self->uris.spectrum);
 
 	lv2_atom_forge_property_head(&self->forge, self->uris.spec_data_x, 0);
 	lv2_atom_forge_vector(&self->forge, sizeof(float), self->uris.atom_Float, p, sp_x);
@@ -497,7 +497,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		/* for each message from UI... */
 		while(!lv2_atom_sequence_is_end(&(self->control)->body, (self->control)->atom.size, ev)) {
 			/* .. only look at atom-events.. */
-			if (ev->body.type == self->uris.atom_Blank) {
+			if (ev->body.type == self->uris.atom_Blank || ev->body.type == self->uris.atom_Object) {
 				const LV2_Atom_Object* obj = (LV2_Atom_Object*)&ev->body;
 				/* interpret atom-objects: */
 				if (obj->body.otype == self->uris.ui_on) {
