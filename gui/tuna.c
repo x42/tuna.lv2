@@ -113,6 +113,7 @@ typedef struct {
 	bool disable_signals;
 	bool spectr_enable;
 
+	const char *nfo;
 } TunaUI;
 
 static const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -398,7 +399,7 @@ static void render_frontface(TunaUI* ui) {
 	write_text_full(cr, "accuracy", ui->font[F_M_SMALL], L_CNT_XC, L_ERR_YT + L_ERR_H/2, 0, 2, c_g60);
 
 #if 1 /* version info */
-	write_text_full(cr, "x42 tuna " TUNAVERSION, ui->font[F_M_SMALL],
+	write_text_full(cr, ui->nfo ? ui->nfo : "x42 tuna " VERSION, ui->font[F_M_SMALL],
 			15, 20, 1.5 * M_PI, 7, c_g20);
 #endif
 
@@ -1089,6 +1090,7 @@ instantiate(
 	ui->controller = controller;
 	map_tuna_uris(ui->map, &ui->uris);
 	lv2_atom_forge_init(&ui->forge, ui->map);
+	ui->nfo = robtk_info(ui_toplevel);
 
 	*widget = toplevel(ui, ui_toplevel);
 	render_frontface(ui);

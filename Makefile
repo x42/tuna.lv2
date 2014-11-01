@@ -110,7 +110,7 @@ ifeq ($(shell pkg-config --atleast-version=1.8.1 lv2 && echo yes), yes)
 endif
 
 # add library dependent flags and libs
-override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DTUNAVERSION="\"$(tuna_VERSION)\""
+override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
 
 ifneq ($(shell test -f fftw-3.3.4/.libs/libfftw3f.a || echo no), no)
