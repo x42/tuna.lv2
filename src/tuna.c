@@ -16,8 +16,9 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
-
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +71,7 @@ void debug_printf (const char *fmt,...) {}
 #include "fft.c"
 
 /* recursively scan octave-overtones up to 4 octaves */
-static int fftx_scan_overtones(struct FFTAnalysis *ft,
+static uint32_t fftx_scan_overtones(struct FFTAnalysis *ft,
 		const float threshold, uint32_t bin, uint32_t octave,
 		const float v_oct2)
 {
@@ -117,7 +118,7 @@ static float fftx_find_note(struct FFTAnalysis *ft,
 				&& ft->power[i] > ft->power[i+1]
 			 ) {
 
-			int o = fftx_scan_overtones(ft, ft->power[i] * v_oct, i * 2, 2, v_ovt);
+			uint32_t o = fftx_scan_overtones(ft, ft->power[i] * v_oct, i * 2, 2, v_ovt);
 			debug_printf("Candidate (%d) %f Hz -> %d overtones\n", i, fftx_freq_at_bin(ft, i) , o);
 
 			if (o > octave
