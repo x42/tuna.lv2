@@ -14,6 +14,7 @@ RW?=robtk/
 LV2DIR ?= $(PREFIX)/$(LIBDIR)/lv2
 
 BUILDDIR=build/
+APPBLD=x42/
 BUNDLE=tuna.lv2
 
 LV2NAME=tuna
@@ -31,6 +32,7 @@ UNAME=$(shell uname)
 ifeq ($(UNAME),Darwin)
   LV2LDFLAGS=-dynamiclib
   LIB_EXT=.dylib
+  EXE_EXT=
   UI_TYPE=ui:CocoaUI
   PUGL_SRC=$(RW)pugl/pugl_osx.m
   PKG_LIBS=
@@ -39,11 +41,26 @@ ifeq ($(UNAME),Darwin)
 else
   LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic
   LIB_EXT=.so
+  EXE_EXT=
   UI_TYPE=ui:X11UI
   PUGL_SRC=$(RW)pugl/pugl_x11.c
   PKG_LIBS=glu gl
   GLUILIBS=-lX11
   GLUICFLAGS+=`pkg-config --cflags glu`
+endif
+
+ifneq ($(XWIN),)
+  CC=$(XWIN)-gcc
+  CXX=$(XWIN)-g++
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed -lpthread
+  LIB_EXT=.dll
+  EXE_EXT=.exe
+  PUGL_SRC=$(RW)pugl/pugl_win.cpp
+  PKG_GL_LIBS=
+  GLUILIBS=-lws2_32 -lwinmm -lopengl32 -lglu32 -lgdi32 -lcomdlg32 -lpthread
+  BUILDGTK=no
+  GLUICFLAGS=-I.
+  override LDFLAGS += -static-libgcc -static-libstdc++
 endif
 
 ifeq ($(EXTERNALUI), yes)
@@ -86,6 +103,14 @@ ifeq ($(shell pkg-config --exists glib-2.0 gtk+-2.0 pango cairo $(PKG_LIBS) || e
   $(error "This plugin requires cairo, pango, openGL, glib-2.0 and gtk+-2.0")
 endif
 
+# TODO jack-wrapper (not enabled by default, yet
+# need jack and lv2 > =1.4.2 (idle API)
+#
+#ifeq ($(shell pkg-config --exists jack || echo no), no)
+#  $(warning *** libjack from http://jackaudio.org is required)
+#  $(error   Please install libjack-dev or libjack-jackd2-dev)
+#endif
+
 ifneq ($(MAKECMDGOALS), submodules)
   ifeq ($(wildcard $(RW)robtk.mk),)
     $(warning This plugin needs https://github.com/x42/robtk)
@@ -116,6 +141,7 @@ override CFLAGS += `pkg-config --cflags lv2`
 ifneq ($(shell test -f fftw-3.3.4/.libs/libfftw3f.a || echo no), no)
   LV2CFLAGS=$(CFLAGS) -Ifftw-3.3.4/api
   LOADLIBES=fftw-3.3.4/.libs/libfftw3f.a -lm
+  FFTW=-Ifftw-3.3.4/api fftw-3.3.4/.libs/libfftw3f.a -lm
 else
   ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
     $(error "fftw3f library was not found")
@@ -143,6 +169,7 @@ else
   endif
   LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
   $(eval LOADLIBES=$(FFTWA) -lm)
+  $(eval FFTW=`pkg-config --cflags fftw3f` $(FFTWA) -lm)
 endif
 
 GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
@@ -151,6 +178,7 @@ GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
 GLUICFLAGS+=`pkg-config --cflags cairo pango`
 GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)`
 
+GLUICFLAGS+=-DUSE_GUI_THREAD
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
 endif
@@ -176,6 +204,11 @@ submodules:
 	-test -d .git -a .gitmodules -a -f Makefile.git && $(MAKE) -f Makefile.git submodules
 
 all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets)
+
+jackapps: \
+	$(APPBLD)x42-tuna \
+	$(APPBLD)x42-tuna-collection\
+	$(APPBLD)x42-tuna-fft
 
 $(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
@@ -227,6 +260,31 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES)
 	$(STRIP) -x -X $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
+JACKCFLAGS=-I. $(CFLAGS) $(CXXFLAGS) $(LIC_CFLAGS)
+JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo $(PKG_GL_LIBS)`
+JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES)
+
+$(eval x42_tuna_JACKSRC = src/tuna.c $(value FFTW))
+x42_tuna_JACKGUI = gui/tuna.c
+x42_tuna_LV2HTTL = lv2ttl/tuna1.h
+x42_tuna_JACKDESC = lv2ui_descriptor
+$(APPBLD)x42-tuna$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
+
+$(eval x42_tuna_fft_JACKSRC = src/tuna.c $(value FFTW))
+x42_tuna_fft_JACKGUI = gui/tuna.c
+x42_tuna_fft_LV2HTTL = lv2ttl/tuna2.h
+x42_tuna_fft_JACKDESC = lv2ui_descriptor
+$(APPBLD)x42-tuna-fft$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
+
+
+$(eval x42_tuna_collection_JACKSRC = -DX42_MULTIPLUGIN src/tuna.c $(APPBLD)x42-tuna.o $(value FFTW))
+x42_tuna_collection_LV2HTTL = lv2ttl/plugins.h
+$(APPBLD)x42-tuna-collection$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+	$(APPBLD)x42-tuna.o lv2ttl/tuna1.h lv2ttl/tuna2.h lv2ttl/plugins.h
+
+
 -include $(RW)robtk.mk
 
 $(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/tuna.c src/tuna.h
@@ -254,10 +312,12 @@ clean:
 	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT)  \
 	  $(BUILDDIR)$(LV2GTK)$(LIB_EXT)
 	rm -rf $(BUILDDIR)*.dSYM
+	rm -rf $(APPBLD)x42-*
+	-test -d $(APPBLD) && rmdir $(APPBLD) || true
 	-test -d $(BUILDDIR) && rmdir $(BUILDDIR) || true
 
 distclean: clean
 	rm -f cscope.out cscope.files tags
 
-.PHONY: clean all install uninstall distclean \
+.PHONY: clean all install uninstall distclean jackapps \
         submodule_check submodules submodule_update submodule_pull
