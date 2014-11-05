@@ -1225,6 +1225,9 @@ port_event(LV2UI_Handle handle,
 			} else {
 				ui->s_rms += .3 * (v - ui->s_rms) + 1e-12;
 			}
+			if (ui->strobe_tme == 0 && v > -100) {
+				queue_draw(ui->darea);
+			}
 			break;
 
 		case TUNA_ERROR:    ui->p_error = v;
