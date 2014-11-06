@@ -35,8 +35,8 @@ ifeq ($(UNAME),Darwin)
   EXE_EXT=
   UI_TYPE=ui:CocoaUI
   PUGL_SRC=$(RW)pugl/pugl_osx.m
-  PKG_LIBS=
-  GLUILIBS=-framework Cocoa -framework OpenGL
+  PKG_GL_LIBS=
+  GLUILIBS=-framework Cocoa -framework OpenGL -framework CoreFoundation
   BUILDGTK=no
 else
   LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic
@@ -44,7 +44,7 @@ else
   EXE_EXT=
   UI_TYPE=ui:X11UI
   PUGL_SRC=$(RW)pugl/pugl_x11.c
-  PKG_LIBS=glu gl
+  PKG_GL_LIBS=glu gl
   GLUILIBS=-lX11
   GLUICFLAGS+=`pkg-config --cflags glu`
 endif
@@ -84,8 +84,12 @@ targets=$(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 ifneq ($(BUILDOPENGL), no)
 targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
 endif
+
 ifneq ($(BUILDGTK), no)
 targets+=$(BUILDDIR)$(LV2GTK)$(LIB_EXT)
+PKG_GTK_LIBS=glib-2.0 gtk+-2.0
+else
+PKG_GTK_LIBS=
 endif
 
 ###############################################################################
@@ -99,8 +103,8 @@ ifeq ($(shell pkg-config --atleast-version=1.4 lv2 || echo no), no)
   $(error "LV2 SDK needs to be version 1.4 or later")
 endif
 
-ifeq ($(shell pkg-config --exists glib-2.0 gtk+-2.0 pango cairo $(PKG_LIBS) || echo no), no)
-  $(error "This plugin requires cairo, pango, openGL, glib-2.0 and gtk+-2.0")
+ifeq ($(shell pkg-config --exists pango cairo $(PKG_GTK_LIBS) $(PKG_GL_LIBS) || echo no), no)
+  $(error "This plugin requires cairo pango $(PKG_GTK_LIBS) $(PKG_GL_LIBS)")
 endif
 
 # TODO jack-wrapper (not enabled by default, yet
@@ -176,7 +180,7 @@ GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
 GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
 
 GLUICFLAGS+=`pkg-config --cflags cairo pango`
-GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)`
+GLUILIBS+=`pkg-config $(PKG_UI_FLAGS) --libs cairo pango pangocairo $(PKG_GL_LIBS)`
 
 GLUICFLAGS+=-DUSE_GUI_THREAD
 ifeq ($(GLTHREADSYNC), yes)
