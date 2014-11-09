@@ -38,6 +38,7 @@ ifeq ($(UNAME),Darwin)
   PKG_GL_LIBS=
   GLUILIBS=-framework Cocoa -framework OpenGL -framework CoreFoundation
   BUILDGTK=no
+  STRIPFLAGS=-u -r -arch all -s $(RW)lv2syms
 else
   LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic
   LIB_EXT=.so
@@ -47,6 +48,7 @@ else
   PKG_GL_LIBS=glu gl
   GLUILIBS=-lX11
   GLUICFLAGS+=`pkg-config --cflags glu`
+  STRIPFLAGS= -s
 endif
 
 ifneq ($(XWIN),)
@@ -262,7 +264,7 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/tuna.c \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES)
-	$(STRIP) -x -X $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
+	$(STRIP) $(STRIPFLAGS) $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
 JACKCFLAGS=-I. $(CFLAGS) $(CXXFLAGS) $(LIC_CFLAGS)
 JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo $(PKG_GL_LIBS)`
