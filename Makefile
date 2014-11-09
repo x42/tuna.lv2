@@ -184,6 +184,13 @@ GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
 GLUICFLAGS+=`pkg-config --cflags cairo pango`
 GLUILIBS+=`pkg-config $(PKG_UI_FLAGS) --libs cairo pango pangocairo $(PKG_GL_LIBS)`
 
+ifneq ($(XWIN),)
+GLUILIBS+=-lpthread -lusp10
+endif
+
+GLUICFLAGS+=$(LIC_CFLAGS)
+GLUILIBS+=$(LIC_LOADLIBES)
+
 GLUICFLAGS+=-DUSE_GUI_THREAD
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
