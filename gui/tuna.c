@@ -1021,10 +1021,10 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	robtk_spin_set_callback(ui->spb_tuning, cb_set_tuning, ui);
 
 	/* misc */
-	ui->font[0] = pango_font_description_from_string("Mono 14");
-	ui->font[1] = pango_font_description_from_string("Sans 12");
-	ui->font[2] = pango_font_description_from_string("Mono 48");
-	ui->font[3] = pango_font_description_from_string("Mono 8");
+	ui->font[0] = pango_font_description_from_string("Mono 18px");
+	ui->font[1] = pango_font_description_from_string("Sans 14px");
+	ui->font[2] = pango_font_description_from_string("Mono 56px");
+	ui->font[3] = pango_font_description_from_string("Mono 11px");
 
 	if (ui->spectr_enable) {
 		robtk_rbtn_set_active(ui->disp[0], TRUE);
