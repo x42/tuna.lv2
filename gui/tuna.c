@@ -1283,7 +1283,7 @@ port_event(LV2UI_Handle handle,
 	}
 }
 
-	static const void*
+static const void*
 extension_data(const char* uri)
 {
 	return NULL;
