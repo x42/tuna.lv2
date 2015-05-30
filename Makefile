@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 #OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only
-OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -O3
+OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -O3 -DNDEBUG
 PREFIX ?= /usr/local
 CFLAGS ?= -g -Wall -Wno-unused-function
 LIBDIR ?= lib
