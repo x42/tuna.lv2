@@ -169,8 +169,10 @@ else
   $(info "Consider statically linking these plugins against a custom build")
   $(info "of libfftw3f.a built with -fvisibility=hidden to avoid this issue.")
   $(warning "")
+  ifneq ("$(wildcard static_fft.sh)","")
   $(warning "**********************************************************")
   $(warning "     run   ./static_fft.sh    prior to make to do so.     ")
+  endif
   $(warning "**********************************************************")
   $(warning "")
   endif
