@@ -1,19 +1,25 @@
 #!/usr/bin/make -f
+# these can be overridden using make variables. e.g.
+#   make install DESTDIR=$(CURDIR)/debian/meters.lv2 PREFIX=/usr
 
-#OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only
-OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -O3 -DNDEBUG
 PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man/man1
+# see http://lv2plug.in/pages/filesystem-hierarchy-standard.html, don't use libdir
+LV2DIR ?= $(PREFIX)/lib/lv2
+
+OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only -DNDEBUG
 CFLAGS ?= -g -Wall -Wno-unused-function
-LIBDIR ?= lib
 STRIP  ?= strip
 
 EXTERNALUI?=yes
 BUILDGTK?=no
 KXURI?=yes
-RW?=robtk/
-###############################################################################
-LV2DIR ?= $(PREFIX)/$(LIBDIR)/lv2
 
+tuna_VERSION?=$(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
+RW?=robtk/
+
+###############################################################################
 BUILDDIR=build/
 APPBLD=x42/
 BUNDLE=tuna.lv2
@@ -22,7 +28,6 @@ LV2NAME=tuna
 LV2GUI=tunaUI_gl
 LV2GTK=tunaUI_gtk
 
-tuna_VERSION?=$(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
 #########
 
 LV2UIREQ=
@@ -142,8 +147,14 @@ ifeq ($(shell pkg-config --atleast-version=1.8.1 lv2 && echo yes), yes)
 endif
 
 # add library dependent flags and libs
-override CFLAGS +=-fPIC $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
+override CFLAGS +=-g $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
+ifeq ($(XWIN),)
+override CFLAGS += -fPIC -fvisibility=hidden
+else
+override CFLAGS += -DPTW32_STATIC_LIB
+override CXXFLAGS += -DPTW32_STATIC_LIB
+endif
 
 ifneq ($(shell test -f fftw-3.3.4/.libs/libfftw3f.a || echo no), no)
   LV2CFLAGS=$(CFLAGS) -Ifftw-3.3.4/api
@@ -219,7 +230,7 @@ submodule_check:
 submodules:
 	-test -d .git -a .gitmodules -a -f Makefile.git && $(MAKE) -f Makefile.git submodules
 
-all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets)
+all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(APPBLD)x42-tuna-collection
 
 jackapps: \
 	$(APPBLD)x42-tuna \
@@ -309,18 +320,38 @@ $(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/tuna.c src/tuna.h
 ###############################################################################
 # install/uninstall/clean target definitions
 
-install: all
+install: install-bin install-man
+
+uninstall: uninstall-bin uninstall-man
+
+install-bin: all
 	install -d $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -m755 $(targets) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -m644 $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(DESTDIR)$(LV2DIR)/$(BUNDLE)
+	install -d $(DESTDIR)$(BINDIR)
+	install -T -m755 $(APPBLD)x42-tuna-collection $(DESTDIR)$(BINDIR)/x42-tuna
 
-uninstall:
+uninstall-bin:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/manifest.ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME).ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GUI)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GTK)$(LIB_EXT)
+	rm -f $(DESTDIR)$(BINDIR)/x42-tuna
 	-rmdir $(DESTDIR)$(LV2DIR)/$(BUNDLE)
+	-rmdir $(DESTDIR)$(BINDIR)
+
+install-man:
+	install -d $(DESTDIR)$(MANDIR)
+	install -m644 x42-tuna.1 $(DESTDIR)$(MANDIR)
+
+uninstall-man:
+	rm -f $(DESTDIR)$(MANDIR)/x42-tuna.1
+	-rmdir $(DESTDIR)$(MANDIR)
+
+man: $(APPBLD)x42-tuna-collection
+	help2man -N -n 'JACK Music Instrument Tuner' -o x42-tuna.1 $(APPBLD)x42-tuna-collection
+
 
 clean:
 	rm -f $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl \
@@ -335,5 +366,6 @@ clean:
 distclean: clean
 	rm -f cscope.out cscope.files tags
 
-.PHONY: clean all install uninstall distclean jackapps \
+.PHONY: clean all install uninstall distclean jackapps man \
+        install-bin uninstall-bin install-man uninstall-man \
         submodule_check submodules submodule_update submodule_pull
