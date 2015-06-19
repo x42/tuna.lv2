@@ -230,12 +230,12 @@ submodule_check:
 submodules:
 	-test -d .git -a .gitmodules -a -f Makefile.git && $(MAKE) -f Makefile.git submodules
 
-all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(APPBLD)x42-tuna-collection
+all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(APPBLD)x42-tuna-collection$(EXE_EXT)
 
 jackapps: \
-	$(APPBLD)x42-tuna \
-	$(APPBLD)x42-tuna-collection\
-	$(APPBLD)x42-tuna-fft
+	$(APPBLD)x42-tuna$(EXE_EXT) \
+	$(APPBLD)x42-tuna-collection$(EXE_EXT) \
+	$(APPBLD)x42-tuna-fft$(EXE_EXT)
 
 $(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
@@ -329,7 +329,7 @@ install-bin: all
 	install -m755 $(targets) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -m644 $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -d $(DESTDIR)$(BINDIR)
-	install -T -m755 $(APPBLD)x42-tuna-collection $(DESTDIR)$(BINDIR)/x42-tuna
+	install -T -m755 $(APPBLD)x42-tuna-collection$(EXE_EXT) $(DESTDIR)$(BINDIR)/x42-tuna$(EXE_EXT)
 
 uninstall-bin:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/manifest.ttl
@@ -337,7 +337,7 @@ uninstall-bin:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GUI)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GTK)$(LIB_EXT)
-	rm -f $(DESTDIR)$(BINDIR)/x42-tuna
+	rm -f $(DESTDIR)$(BINDIR)/x42-tuna$(EXE_EXT)
 	-rmdir $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	-rmdir $(DESTDIR)$(BINDIR)
 
