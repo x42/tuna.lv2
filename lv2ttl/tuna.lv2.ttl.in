@@ -5,6 +5,7 @@
   doap:license <http://usefulinc.com/doap/licenses/gpl> ;
   doap:maintainer <http://gareus.org/rgareus#me> ;
   doap:name "Instrument Tuner@NAME_SUFFIX@";
+  @VERSION@
   lv2:optionalFeature lv2:hardRTCapable ;
   lv2:requiredFeature urid:map ;
   ui:ui @LV2NAME@:@UI@ ;
