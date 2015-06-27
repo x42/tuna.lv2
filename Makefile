@@ -114,21 +114,18 @@ ifeq ($(shell pkg-config --exists lv2 || echo no), no)
   $(error "LV2 SDK was not found")
 endif
 
-ifeq ($(shell pkg-config --atleast-version=1.4 lv2 || echo no), no)
-  $(error "LV2 SDK needs to be version 1.4 or later")
+ifeq ($(shell pkg-config --atleast-version=1.6.0 lv2 || echo no), no)
+  $(error "LV2 SDK needs to be version 1.6.0 or later")
 endif
 
 ifeq ($(shell pkg-config --exists pango cairo $(PKG_GTK_LIBS) $(PKG_GL_LIBS) || echo no), no)
   $(error "This plugin requires cairo pango $(PKG_GTK_LIBS) $(PKG_GL_LIBS)")
 endif
 
-# TODO jack-wrapper (not enabled by default, yet
-# need jack and lv2 > =1.4.2 (idle API)
-#
-#ifeq ($(shell pkg-config --exists jack || echo no), no)
-#  $(warning *** libjack from http://jackaudio.org is required)
-#  $(error   Please install libjack-dev or libjack-jackd2-dev)
-#endif
+ifeq ($(shell pkg-config --exists jack || echo no), no)
+  $(warning *** libjack from http://jackaudio.org is required)
+  $(error   Please install libjack-dev or libjack-jackd2-dev)
+endif
 
 ifneq ($(MAKECMDGOALS), submodules)
   ifeq ($(wildcard $(RW)robtk.mk),)
@@ -141,12 +138,10 @@ ifneq ($(MAKECMDGOALS), submodules)
   endif
 endif
 
-# check for LV2 idle thread
-ifeq ($(shell pkg-config --atleast-version=1.4.2 lv2 && echo yes), yes)
-  GLUICFLAGS+=-DHAVE_IDLE_IFACE
-  GTKUICFLAGS+=-DHAVE_IDLE_IFACE
-  LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
-endif
+# lv2 >= 1.6.0
+GLUICFLAGS+=-DHAVE_IDLE_IFACE
+GTKUICFLAGS+=-DHAVE_IDLE_IFACE
+LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
 
 # check for lv2_atom_forge_object  new in 1.8.1 deprecates lv2_atom_forge_blank
 ifeq ($(shell pkg-config --atleast-version=1.8.1 lv2 && echo yes), yes)
