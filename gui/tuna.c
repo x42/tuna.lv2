@@ -776,6 +776,7 @@ static bool cb_set_tuning (RobWidget* handle, void *data) {
 		float val = robtk_spin_get_value(ui->spb_tuning);
 		ui->write(ui->controller, TUNA_TUNING, sizeof(float), 0, (const void*) &val);
 	}
+	queue_draw(ui->darea);
 	return TRUE;
 }
 
