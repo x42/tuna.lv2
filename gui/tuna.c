@@ -16,15 +16,15 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define MTR_URI TUNA_URI
-#define MTR_GUI "ui"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
 #include "lv2/lv2plug.in/ns/extensions/ui/ui.h"
 #include "src/tuna.h"
+
+#define RTK_URI TUNA_URI
+#define RTK_GUI "ui"
 
 #ifndef MIN
 #define MIN(A,B) ( (A) < (B) ? (A) : (B) )
