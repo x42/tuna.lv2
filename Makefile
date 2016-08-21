@@ -30,6 +30,7 @@ LV2GTK=tunaUI_gtk
 
 #########
 
+LOADLIBES=-lm
 LV2UIREQ=
 GLUICFLAGS=-I.
 GTKUICFLAGS=-I.
@@ -127,6 +128,10 @@ ifeq ($(shell pkg-config --exists jack || echo no), no)
   $(error   Please install libjack-dev or libjack-jackd2-dev)
 endif
 
+ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
+	$(error "fftw3f library was not found")
+endif
+
 ifneq ($(MAKECMDGOALS), submodules)
   ifeq ($(wildcard $(RW)robtk.mk),)
     $(warning This plugin needs https://github.com/x42/robtk)
@@ -150,48 +155,13 @@ endif
 
 # add library dependent flags and libs
 override CFLAGS +=-g $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
-override CFLAGS += `pkg-config --cflags lv2`
+override CFLAGS += `pkg-config --cflags lv2 fftw3f`
+override LOADLIBES += `pkg-config --libs lv2 fftw3f`
 ifeq ($(XWIN),)
 override CFLAGS += -fPIC -fvisibility=hidden
 else
 override CFLAGS += -DPTW32_STATIC_LIB
 override CXXFLAGS += -DPTW32_STATIC_LIB
-endif
-
-ifneq ($(shell test -f fftw-3.3.4/.libs/libfftw3f.a || echo no), no)
-  LV2CFLAGS=$(CFLAGS) -Ifftw-3.3.4/api
-  LOADLIBES=fftw-3.3.4/.libs/libfftw3f.a -lm
-  FFTW=-Ifftw-3.3.4/api fftw-3.3.4/.libs/libfftw3f.a -lm
-else
-  ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
-    $(error "fftw3f library was not found")
-  endif
-  FFTWA=`pkg-config --variable=libdir fftw3f`/libfftw3f.a
-  ifeq ($(shell test -f $(FFTWA) || echo no), no)
-    FFTWA=`pkg-config --libs fftw3f`
-  endif
-  ifeq ($(shell pkg-config --atleast-version=99.99.99 fftw3f || echo no), no)
-  # https://github.com/FFTW/fftw3/issues/16
-  $(warning "**********************************************************")
-  $(warning "           the fftw3 library is not thread-safe           ")
-  $(warning "**********************************************************")
-  $(info "These plugins may cause crashes when used in a plugin-host")
-  $(info "where libfftw3f symbols are mapped in the global namespace.")
-  $(info "Neither these plugins nor the host has control over possible")
-  $(info "other plugins calling the fftw planner simultaneously.")
-  $(info "Consider statically linking these plugins against a custom build")
-  $(info "of libfftw3f.a built with -fvisibility=hidden to avoid this issue.")
-  $(warning "")
-  ifneq ("$(wildcard static_fft.sh)","")
-  $(warning "**********************************************************")
-  $(warning "     run   ./static_fft.sh    prior to make to do so.     ")
-  endif
-  $(warning "**********************************************************")
-  $(warning "")
-  endif
-  LV2CFLAGS=$(CFLAGS) `pkg-config --cflags fftw3f`
-  $(eval LOADLIBES=$(FFTWA) -lm)
-  $(eval FFTW=`pkg-config --cflags fftw3f` $(FFTWA) -lm)
 endif
 
 GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
@@ -291,16 +261,16 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
 
 JACKCFLAGS=-I. $(CFLAGS) $(CXXFLAGS) $(LIC_CFLAGS)
 JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo $(PKG_GL_LIBS)`
-JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES)
+JACKLIBS=-lm $(LOADLIBES) $(GLUILIBS) $(LIC_LOADLIBES)
 
-$(eval x42_tuna_JACKSRC = src/tuna.c $(value FFTW))
+$(eval x42_tuna_JACKSRC = src/tuna.c)
 x42_tuna_JACKGUI = gui/tuna.c
 x42_tuna_LV2HTTL = lv2ttl/tuna1.h
 x42_tuna_JACKDESC = lv2ui_descriptor
 $(APPBLD)x42-tuna$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
 	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
 
-$(eval x42_tuna_fft_JACKSRC = src/tuna.c $(value FFTW))
+$(eval x42_tuna_fft_JACKSRC = src/tuna.c)
 x42_tuna_fft_JACKGUI = gui/tuna.c
 x42_tuna_fft_LV2HTTL = lv2ttl/tuna2.h
 x42_tuna_fft_JACKDESC = lv2ui_descriptor
@@ -308,7 +278,7 @@ $(APPBLD)x42-tuna-fft$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
 	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
 
 
-$(eval x42_tuna_collection_JACKSRC = -DX42_MULTIPLUGIN src/tuna.c $(APPBLD)x42-tuna.o $(value FFTW))
+$(eval x42_tuna_collection_JACKSRC = -DX42_MULTIPLUGIN src/tuna.c $(APPBLD)x42-tuna.o)
 x42_tuna_collection_LV2HTTL = lv2ttl/plugins.h
 $(APPBLD)x42-tuna-collection$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
 	$(APPBLD)x42-tuna.o lv2ttl/tuna1.h lv2ttl/tuna2.h lv2ttl/plugins.h
