@@ -1,0 +1,6 @@
+
+@LV2NAME@:@INSTANCE@
+    modgui:gui [
+        modgui:brand "x42" ;
+        modgui:label "x42-tuner" ;
+    ] .

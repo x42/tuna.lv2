@@ -40,6 +40,11 @@ ifneq ($(MOD),)
   INLINEDISPLAY=no
   BUILDOPENGL=no
   BUILDJACKAPP=no
+  MODLABEL=mod:label \"Tuna Tuner\";
+  MODBRAND=mod:brand \"x42\";
+else
+  MODLABEL=
+  MODBRAND=
 endif
 
 UNAME=$(shell uname)
@@ -217,13 +222,17 @@ $(BUILDDIR)manifest.ttl: lv2ttl/manifest.gui.in lv2ttl/manifest.lv2.ttl.in lv2tt
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g" \
 		lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
-	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
-	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
-	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
+	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 ifneq ($(BUILDOPENGL), no)
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g" \
+	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
 		lv2ttl/manifest.gui.in >> $(BUILDDIR)manifest.ttl
+endif
+ifneq ($(MOD),)
+	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g" \
+		lv2ttl/manifest.modgui.in >> $(BUILDDIR)manifest.ttl
 endif
 
 $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in lv2ttl/$(LV2NAME).gui.ttl.in Makefile
@@ -231,13 +240,15 @@ $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
 		lv2ttl/$(LV2NAME).ttl.in > $(BUILDDIR)$(LV2NAME).ttl
 ifneq ($(BUILDOPENGL), no)
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gl/;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;s/@URI_SUFFIX@//g" \
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;" \
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 endif
-	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UITTL@/$(UITTL)/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
+	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@NAME_SUFFIX@//g;s/@UITTL@/$(UITTL)/g;s/@MODBRAND@/$(MODBRAND)/;s/@MODLABEL@/$(MODLABEL)/;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@/[Spectrum]/g;s/@UITTL@/$(UITTL)/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
+ifneq ($(BUILDOPENGL), no)
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@NAME_SUFFIX@/[Spectrum]/g;s/@UITTL@/$(UITTL)/g;s/@MODBRAND@/$(MODBRAND)/;s/@MODLABEL@/$(MODLABEL)/;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
+endif
 
 DSP_SRC = src/tuna.c
 DSP_DEPS = $(DSP_SRC) src/spectr.c src/fft.c src/tuna.h

@@ -1,15 +1,17 @@
 
 
-@LV2NAME@:@INSTANCE@@URI_SUFFIX@
+@LV2NAME@:@INSTANCE@
   a lv2:Plugin, doap:Project, lv2:AnalyserPlugin;
   doap:license <http://usefulinc.com/doap/licenses/gpl> ;
   doap:maintainer <http://gareus.org/rgareus#me> ;
   doap:name "Instrument Tuner@NAME_SUFFIX@";
   @VERSION@
-	@UITTL@
+  @UITTL@
+  @MODBRAND@
+  @MODLABEL@
   lv2:optionalFeature lv2:hardRTCapable ;
   lv2:requiredFeature urid:map ;
-	@SIGNATURE@
+  @SIGNATURE@
   lv2:port
   [
     a atom:AtomPort ,
@@ -222,5 +224,5 @@
     lv2:default -15.0 ;
     lv2:portProperty pprop:notOnGUI ;
   ] ;
-	rdfs:comment "Musical instrument tuner with strobe characteristics" ;
+  rdfs:comment "Musical instrument tuner with strobe characteristics" ;
   .
