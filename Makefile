@@ -1,7 +1,9 @@
 #!/usr/bin/make -f
-# these can be overridden using make variables. e.g.
-#   make install DESTDIR=$(CURDIR)/debian/meters.lv2 PREFIX=/usr
 
+# these can be overridden using make variables. e.g.
+#   make CFLAGS=-O2
+#   make install DESTDIR=$(CURDIR)/debian/tuna.lv2 PREFIX=/usr
+#
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 MANDIR ?= $(PREFIX)/share/man/man1
@@ -9,7 +11,7 @@ MANDIR ?= $(PREFIX)/share/man/man1
 LV2DIR ?= $(PREFIX)/lib/lv2
 
 OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only -DNDEBUG
-CFLAGS ?= -g -Wall -Wno-unused-function
+CFLAGS ?= -Wall -g -Wno-unused-function
 STRIP  ?= strip
 
 BUILDOPENGL?=yes
@@ -19,6 +21,7 @@ tuna_VERSION?=$(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo
 RW ?= robtk/
 
 ###############################################################################
+
 BUILDDIR = build/
 APPBLD   = x42/
 
@@ -39,8 +42,6 @@ ifneq ($(MOD),)
   BUILDJACKAPP=no
 endif
 
-
-
 UNAME=$(shell uname)
 ifeq ($(UNAME),Darwin)
   LV2LDFLAGS=-dynamiclib
@@ -53,7 +54,7 @@ ifeq ($(UNAME),Darwin)
   STRIPFLAGS=-u -r -arch all -s $(RW)lv2syms
   EXTENDED_RE=-E
 else
-  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed -pthread
   LIB_EXT=.so
   EXE_EXT=
   UI_TYPE=ui:X11UI
@@ -69,7 +70,7 @@ ifneq ($(XWIN),)
   CC=$(XWIN)-gcc
   CXX=$(XWIN)-g++
   STRIP=$(XWIN)-strip
-  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed -lpthread
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed -pthread
   LIB_EXT=.dll
   EXE_EXT=.exe
   PUGL_SRC=$(RW)pugl/pugl_win.cpp
@@ -161,12 +162,12 @@ LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterfa
 # add library dependent flags and libs
 override CFLAGS +=-g $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2 fftw3f`
-override LOADLIBES += `pkg-config --libs lv2 fftw3f`
 ifeq ($(XWIN),)
 override CFLAGS += -fPIC -fvisibility=hidden
 else
 override CFLAGS += -DPTW32_STATIC_LIB
 endif
+override LOADLIBES += `pkg-config --libs lv2 fftw3f`
 
 
 GLUICFLAGS+=`pkg-config --cflags cairo pango`
@@ -179,8 +180,8 @@ endif
 GLUICFLAGS+=$(LIC_CFLAGS)
 GLUILIBS+=$(LIC_LOADLIBES)
 
+#GLUICFLAGS+=-DUSE_GUI_THREAD
 ifeq ($(GLTHREADSYNC), yes)
-  GLUICFLAGS+=-DUSE_GUI_THREAD
   GLUICFLAGS+=-DTHREADSYNC
 endif
 
@@ -191,8 +192,8 @@ endif
 ROBGL+= Makefile
 
 JACKCFLAGS=-I. $(CXXFLAGS) $(LIC_CFLAGS)
-JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo fftw3 $(PKG_GL_LIBS)`
-JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES)
+JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo fftw3f $(PKG_GL_LIBS)`
+JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES) $(LOADLIBES)
 
 ###############################################################################
 # build target definitions
@@ -212,23 +213,23 @@ submodules:
 
 all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(JACKAPP)
 
-$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
+$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gui.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g" \
-	    lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
+		lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
-	    lv2ttl/manifest.gl.ttl.in >> $(BUILDDIR)manifest.ttl
+		lv2ttl/manifest.gui.in >> $(BUILDDIR)manifest.ttl
 endif
 
 $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in lv2ttl/$(LV2NAME).gui.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
-	    lv2ttl/$(LV2NAME).ttl.in > $(BUILDDIR)$(LV2NAME).ttl
+		lv2ttl/$(LV2NAME).ttl.in > $(BUILDDIR)$(LV2NAME).ttl
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gl/;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;s/@URI_SUFFIX@//g" \
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
@@ -244,7 +245,7 @@ GUI_DEPS =
 
 $(BUILDDIR)$(LV2NAME)$(LIB_EXT): $(DSP_DEPS) Makefile
 	@mkdir -p $(BUILDDIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 $(LIC_CFLAGS) \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) $(LIC_CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) $(DSP_SRC) \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES) $(LIC_LOADLIBES)
 	$(STRIP) $(STRIPFLAGS) $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
