@@ -12,28 +12,34 @@ OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 
 CFLAGS ?= -g -Wall -Wno-unused-function
 STRIP  ?= strip
 
-EXTERNALUI?=yes
-BUILDGTK?=no
-KXURI?=yes
+BUILDOPENGL?=yes
+BUILDJACKAPP?=yes
 
 tuna_VERSION?=$(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
-RW?=robtk/
+RW ?= robtk/
 
 ###############################################################################
-BUILDDIR=build/
-APPBLD=x42/
-BUNDLE=tuna.lv2
+BUILDDIR = build/
+APPBLD   = x42/
+
+###############################################################################
 
 LV2NAME=tuna
 LV2GUI=tunaUI_gl
-LV2GTK=tunaUI_gtk
-
-#########
+BUNDLE=tuna.lv2
+targets=
 
 LOADLIBES=-lm
 LV2UIREQ=
 GLUICFLAGS=-I.
-GTKUICFLAGS=-I.
+
+ifneq ($(MOD),)
+  INLINEDISPLAY=no
+  BUILDOPENGL=no
+  BUILDJACKAPP=no
+endif
+
+
 
 UNAME=$(shell uname)
 ifeq ($(UNAME),Darwin)
@@ -44,11 +50,10 @@ ifeq ($(UNAME),Darwin)
   PUGL_SRC=$(RW)pugl/pugl_osx.m
   PKG_GL_LIBS=
   GLUILIBS=-framework Cocoa -framework OpenGL -framework CoreFoundation
-  BUILDGTK=no
   STRIPFLAGS=-u -r -arch all -s $(RW)lv2syms
   EXTENDED_RE=-E
 else
-  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed
   LIB_EXT=.so
   EXE_EXT=
   UI_TYPE=ui:X11UI
@@ -63,44 +68,34 @@ endif
 ifneq ($(XWIN),)
   CC=$(XWIN)-gcc
   CXX=$(XWIN)-g++
+  STRIP=$(XWIN)-strip
   LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed -lpthread
   LIB_EXT=.dll
   EXE_EXT=.exe
   PUGL_SRC=$(RW)pugl/pugl_win.cpp
   PKG_GL_LIBS=
+  UI_TYPE=ui:WindowsUI
   GLUILIBS=-lws2_32 -lwinmm -lopengl32 -lglu32 -lgdi32 -lcomdlg32 -lpthread
-  BUILDGTK=no
   GLUICFLAGS=-I.
   override LDFLAGS += -static-libgcc -static-libstdc++
 endif
 
 ifeq ($(EXTERNALUI), yes)
-  ifeq ($(KXURI), yes)
-    UI_TYPE=kx:Widget
-    LV2UIREQ+=lv2:requiredFeature kx:Widget;
-    override CFLAGS += -DXTERNAL_UI
-  else
-    LV2UIREQ+=lv2:requiredFeature ui:external;
-    override CFLAGS += -DXTERNAL_UI
-    UI_TYPE=ui:external
-  endif
+  UI_TYPE=
 endif
 
-ifeq ($(BUILDOPENGL)$(BUILDGTK), nono)
-  $(error at least one of gtk or openGL needs to be enabled)
+ifeq ($(UI_TYPE),)
+  UI_TYPE=kx:Widget
+  LV2UIREQ+=lv2:requiredFeature kx:Widget;
+  override CXXFLAGS += -DXTERNAL_UI
 endif
 
-targets=$(BUILDDIR)$(LV2NAME)$(LIB_EXT)
+targets+=$(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
+UITTL=
 ifneq ($(BUILDOPENGL), no)
-targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
-endif
-
-ifneq ($(BUILDGTK), no)
-targets+=$(BUILDDIR)$(LV2GTK)$(LIB_EXT)
-PKG_GTK_LIBS=glib-2.0 gtk+-2.0
-else
-PKG_GTK_LIBS=
+  targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
+  UITTL=ui:ui $(LV2NAME):ui_gl ;
 endif
 
 ###############################################################################
@@ -110,48 +105,58 @@ include git2lv2.mk
 
 ###############################################################################
 # check for build-dependencies
-
 ifeq ($(shell pkg-config --exists lv2 || echo no), no)
   $(error "LV2 SDK was not found")
+endif
+
+ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
+  $(error "fftw3f library was not found")
 endif
 
 ifeq ($(shell pkg-config --atleast-version=1.6.0 lv2 || echo no), no)
   $(error "LV2 SDK needs to be version 1.6.0 or later")
 endif
 
-ifeq ($(shell pkg-config --exists pango cairo $(PKG_GTK_LIBS) $(PKG_GL_LIBS) || echo no), no)
-  $(error "This plugin requires cairo pango $(PKG_GTK_LIBS) $(PKG_GL_LIBS)")
+ifneq ($(BUILDOPENGL)$(BUILDJACKAPP), nono)
+ ifeq ($(shell pkg-config --exists pango cairo $(PKG_GL_LIBS) || echo no), no)
+  $(error "This plugin requires cairo pango $(PKG_GL_LIBS)")
+ endif
 endif
 
-ifeq ($(shell pkg-config --exists jack || echo no), no)
+ifneq ($(BUILDJACKAPP), no)
+ ifeq ($(shell pkg-config --exists jack || echo no), no)
   $(warning *** libjack from http://jackaudio.org is required)
   $(error   Please install libjack-dev or libjack-jackd2-dev)
+ endif
+ JACKAPP=$(APPBLD)x42-tuna-collection$(EXE_EXT)
 endif
-
-ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
-	$(error "fftw3f library was not found")
-endif
-
-ifneq ($(MAKECMDGOALS), submodules)
-  ifeq ($(wildcard $(RW)robtk.mk),)
-    $(warning This plugin needs https://github.com/x42/robtk)
-    $(info set the RW environment variale to the location of the robtk headers)
-    ifeq ($(wildcard .git),.git)
-      $(info or run 'make submodules' to initialize robtk as git submodule)
-    endif
-    $(error robtk not found)
-  endif
-endif
-
-# lv2 >= 1.6.0
-GLUICFLAGS+=-DHAVE_IDLE_IFACE
-GTKUICFLAGS+=-DHAVE_IDLE_IFACE
-LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
 
 # check for lv2_atom_forge_object  new in 1.8.1 deprecates lv2_atom_forge_blank
 ifeq ($(shell pkg-config --atleast-version=1.8.1 lv2 && echo yes), yes)
   override CFLAGS += -DHAVE_LV2_1_8
 endif
+
+ifneq ($(BUILDOPENGL)$(BUILDJACKAPP), nono)
+ ifneq ($(MAKECMDGOALS), submodules)
+  ifeq ($(wildcard $(RW)robtk.mk),)
+    $(warning "**********************************************************")
+    $(warning This plugin needs https://github.com/x42/robtk)
+    $(warning "**********************************************************")
+    $(info )
+    $(info set the RW environment variale to the location of the robtk headers)
+    ifeq ($(wildcard .git),.git)
+      $(info or run 'make submodules' to initialize robtk as git submodule)
+    endif
+    $(info )
+    $(warning "**********************************************************")
+    $(error robtk not found)
+  endif
+ endif
+endif
+
+# LV2 idle >= lv2-1.6.0
+GLUICFLAGS+=-DHAVE_IDLE_IFACE
+LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
 
 # add library dependent flags and libs
 override CFLAGS +=-g $(OPTIMIZATIONS) -DVERSION="\"$(tuna_VERSION)\""
@@ -161,11 +166,8 @@ ifeq ($(XWIN),)
 override CFLAGS += -fPIC -fvisibility=hidden
 else
 override CFLAGS += -DPTW32_STATIC_LIB
-override CXXFLAGS += -DPTW32_STATIC_LIB
 endif
 
-GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
-GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
 
 GLUICFLAGS+=`pkg-config --cflags cairo pango`
 GLUILIBS+=`pkg-config $(PKG_UI_FLAGS) --libs cairo pango pangocairo $(PKG_GL_LIBS)`
@@ -177,14 +179,20 @@ endif
 GLUICFLAGS+=$(LIC_CFLAGS)
 GLUILIBS+=$(LIC_LOADLIBES)
 
-GLUICFLAGS+=-DUSE_GUI_THREAD
 ifeq ($(GLTHREADSYNC), yes)
+  GLUICFLAGS+=-DUSE_GUI_THREAD
   GLUICFLAGS+=-DTHREADSYNC
 endif
 
-ROBGL+= Makefile
-ROBGTK += Makefile
+ifneq ($(LIC_CFLAGS),)
+  SIGNATURE=, <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>
+endif
 
+ROBGL+= Makefile
+
+JACKCFLAGS=-I. $(CXXFLAGS) $(LIC_CFLAGS)
+JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo fftw3 $(PKG_GL_LIBS)`
+JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES)
 
 ###############################################################################
 # build target definitions
@@ -202,32 +210,19 @@ submodule_check:
 submodules:
 	-test -d .git -a .gitmodules -a -f Makefile.git && $(MAKE) -f Makefile.git submodules
 
-all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(APPBLD)x42-tuna-collection$(EXE_EXT)
+all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets) $(JACKAPP)
 
-jackapps: \
-	$(APPBLD)x42-tuna$(EXE_EXT) \
-	$(APPBLD)x42-tuna-collection$(EXE_EXT) \
-	$(APPBLD)x42-tuna-fft$(EXE_EXT)
-
-$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
+$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g" \
 	    lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
-ifneq ($(BUILDOPENGL), no)
 	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
 	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@//g" \
 	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
+ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
 	    lv2ttl/manifest.gl.ttl.in >> $(BUILDDIR)manifest.ttl
-endif
-ifneq ($(BUILDGTK), no)
-	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
-	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
-	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
-	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@LV2GTK@/$(LV2GTK)/g" \
-	    lv2ttl/manifest.gtk.ttl.in >> $(BUILDDIR)manifest.ttl
 endif
 
 $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in lv2ttl/$(LV2NAME).gui.ttl.in Makefile
@@ -237,27 +232,27 @@ $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gl/;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;s/@URI_SUFFIX@//g" \
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UI@/ui_gl/g;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
-	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@/[Spectrum]/g;s/@UI@/ui_gl/g;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
-	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 endif
-ifneq ($(BUILDGTK), no)
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gtk/;s/@UI_TYPE@/ui:GtkUI/;s/@UI_REQ@//;s/@URI_SUFFIX@/_gtk/g" \
-	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ GTK/g;s/@UI@/ui_gtk/g;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
+	sed "s/@INSTANCE@/one/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UITTL@/$(UITTL)/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ [Spectrum]GTK/g;s/@UI@/ui_gtk/g;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
+	sed "s/@INSTANCE@/two/g;s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@/[Spectrum]/g;s/@UITTL@/$(UITTL)/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-endif
 
+DSP_SRC = src/tuna.c
+DSP_DEPS = $(DSP_SRC) src/spectr.c src/fft.c src/tuna.h
+GUI_DEPS =
 
-$(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h
+$(BUILDDIR)$(LV2NAME)$(LIB_EXT): $(DSP_DEPS) Makefile
 	@mkdir -p $(BUILDDIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 \
-	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/tuna.c \
-	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LV2CFLAGS) -std=c99 $(LIC_CFLAGS) \
+	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) $(DSP_SRC) \
+	  -shared $(LV2LDFLAGS) $(LDFLAGS) $(LOADLIBES) $(LIC_LOADLIBES)
 	$(STRIP) $(STRIPFLAGS) $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
+
+jackapps: \
+	$(APPBLD)x42-tuna$(EXE_EXT) \
+	$(APPBLD)x42-tuna-collection$(EXE_EXT) \
+	$(APPBLD)x42-tuna-fft$(EXE_EXT)
 
 JACKCFLAGS=-I. $(CFLAGS) $(CXXFLAGS) $(LIC_CFLAGS)
 JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo $(PKG_GL_LIBS)`
@@ -267,26 +262,26 @@ $(eval x42_tuna_JACKSRC = src/tuna.c)
 x42_tuna_JACKGUI = gui/tuna.c
 x42_tuna_LV2HTTL = lv2ttl/tuna1.h
 x42_tuna_JACKDESC = lv2ui_descriptor
-$(APPBLD)x42-tuna$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+$(APPBLD)x42-tuna$(EXE_EXT): $(DSP_DEPS) $(GUI_DEPS) \
 	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
 
 $(eval x42_tuna_fft_JACKSRC = src/tuna.c)
 x42_tuna_fft_JACKGUI = gui/tuna.c
 x42_tuna_fft_LV2HTTL = lv2ttl/tuna2.h
 x42_tuna_fft_JACKDESC = lv2ui_descriptor
-$(APPBLD)x42-tuna-fft$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+$(APPBLD)x42-tuna-fft$(EXE_EXT): $(DSP_DEPS) $(GUI_DEPS) \
 	        $(x42_tuna_JACKGUI) $(x42_tuna_LV2HTTL)
-
 
 $(eval x42_tuna_collection_JACKSRC = -DX42_MULTIPLUGIN src/tuna.c $(APPBLD)x42-tuna.o)
 x42_tuna_collection_LV2HTTL = lv2ttl/plugins.h
-$(APPBLD)x42-tuna-collection$(EXE_EXT): src/tuna.c src/spectr.c src/fft.c src/tuna.h \
+$(APPBLD)x42-tuna-collection$(EXE_EXT): $(DSP_DEPS) $(GUI_DEPS) \
 	$(APPBLD)x42-tuna.o lv2ttl/tuna1.h lv2ttl/tuna2.h lv2ttl/plugins.h
 
 
--include $(RW)robtk.mk
+ifneq ($(BUILDOPENGL)$(BUILDJACKAPP), nono)
+ -include $(RW)robtk.mk
+endif
 
-$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/tuna.c src/tuna.h
 $(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/tuna.c src/tuna.h
 
 ###############################################################################
@@ -303,27 +298,25 @@ install-bin: all
 ifneq ($(BUILDOPENGL), no)
 	install -m755 $(BUILDDIR)$(LV2GUI)$(LIB_EXT) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 endif
-ifneq ($(BUILDGTK), no)
-	install -m755 $(BUILDDIR)$(LV2GTK)$(LIB_EXT) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
-endif
-	install -m755 $(targets) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
-	install -m644 $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(DESTDIR)$(LV2DIR)/$(BUNDLE)
+ifneq ($(BUILDJACKAPP), no)
 	install -d $(DESTDIR)$(BINDIR)
 	install -T -m755 $(APPBLD)x42-tuna-collection$(EXE_EXT) $(DESTDIR)$(BINDIR)/x42-tuna$(EXE_EXT)
+endif
 
 uninstall-bin:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/manifest.ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME).ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GUI)$(LIB_EXT)
-	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GTK)$(LIB_EXT)
 	rm -f $(DESTDIR)$(BINDIR)/x42-tuna$(EXE_EXT)
 	-rmdir $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	-rmdir $(DESTDIR)$(BINDIR)
 
 install-man:
+ifneq ($(BUILDJACKAPP), no)
 	install -d $(DESTDIR)$(MANDIR)
 	install -m644 x42-tuna.1 $(DESTDIR)$(MANDIR)
+endif
 
 uninstall-man:
 	rm -f $(DESTDIR)$(MANDIR)/x42-tuna.1
@@ -336,8 +329,7 @@ man: $(APPBLD)x42-tuna-collection
 clean:
 	rm -f $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl \
 	  $(BUILDDIR)$(LV2NAME)$(LIB_EXT) \
-	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT)  \
-	  $(BUILDDIR)$(LV2GTK)$(LIB_EXT)
+	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT)
 	rm -rf $(BUILDDIR)*.dSYM
 	rm -rf $(APPBLD)x42-*
 	-test -d $(APPBLD) && rmdir $(APPBLD) || true
