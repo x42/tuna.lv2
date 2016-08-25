@@ -186,7 +186,7 @@ ifeq ($(GLTHREADSYNC), yes)
 endif
 
 ifneq ($(LIC_CFLAGS),)
-  SIGNATURE=, <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>
+  SIGNATURE=lv2:extensionData <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>\\;
 endif
 
 ROBGL+= Makefile

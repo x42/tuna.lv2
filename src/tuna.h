@@ -19,7 +19,9 @@
 #ifndef TUNA_H
 #define TUNA_H
 
+#ifndef TUNA_URI
 #define TUNA_URI "http://gareus.org/oss/lv2/tuna#"
+#endif
 
 #include "lv2/lv2plug.in/ns/ext/atom/atom.h"
 #include "lv2/lv2plug.in/ns/ext/atom/forge.h"

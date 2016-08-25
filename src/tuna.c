@@ -244,11 +244,8 @@ instantiate(
 		return NULL;
 	}
 
-	if (!strncmp(descriptor->URI, TUNA_URI "one", 31 + 3 )) {
-		;
-	} else if (!strncmp(descriptor->URI, TUNA_URI "two", 31 + 3 )) {
-		;
-	} else {
+	if (strncmp(descriptor->URI, TUNA_URI, strlen (TUNA_URI))) {
+		free(self);
 		return NULL;
 	}
 
@@ -779,9 +776,7 @@ static const LV2_Descriptor descriptor ## ID = { \
 };
 
 mkdesc_tuna(0, "one")
-mkdesc_tuna(1, "one_gtk")
-mkdesc_tuna(2, "two")
-mkdesc_tuna(3, "two_gtk")
+mkdesc_tuna(1, "two")
 
 #undef LV2_SYMBOL_EXPORT
 #ifdef _WIN32
@@ -796,8 +791,6 @@ lv2_descriptor(uint32_t index)
 	switch (index) {
 		case  0: return &descriptor0;
 		case  1: return &descriptor1;
-		case  2: return &descriptor2;
-		case  3: return &descriptor3;
 		default: return NULL;
 	}
 }
