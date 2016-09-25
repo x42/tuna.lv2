@@ -179,6 +179,11 @@ typedef struct {
 	uint32_t filter_init;
 	bool initialize;
 
+#ifdef __ARMEL__
+	float freq_last;
+	float cent_last;
+#endif
+
 	/* discriminator */
 	float prev_smpl;
 
@@ -186,6 +191,7 @@ typedef struct {
 	float rms_omega;
 	float rms_signal;
 	float rms_postfilter;
+	float rms_last;
 
 	/* port thresholds */
 	float t_rms, v_rms;
@@ -255,6 +261,11 @@ instantiate(
 	self->prev_smpl = 0;
 	self->rms_signal = 0;
 	self->rms_postfilter = 0;
+	self->rms_last = -100;
+#ifdef __ARMEL__
+	self->freq_last = 0;
+	self->cent_last = 0;
+#endif
 	self->initialize = true;
 	self->spectr_active = false;
 
@@ -282,6 +293,14 @@ instantiate(
 	fft_size |= fft_size >> 16;
 	fft_size++;
 	fft_size = MIN(32768, fft_size);
+
+#ifdef __ARMEL__
+	// TODO investigate autocorrelation
+	// https://en.wikipedia.org/wiki/Wiener%E2%80%93Khinchin_theorem
+	// http://miracle.otago.ac.nz/tartini/papers/A_Smarter_Way_to_Find_Pitch.pdf
+	// for "note finding"
+	fft_size = MIN(2048, fft_size);
+#endif
 
 	fftx_init(self->fftx, fft_size, rate, 0);
 
@@ -717,10 +736,26 @@ run(LV2_Handle handle, uint32_t n_samples)
 		const float cent = 1200.0 * log2(freq_avg / note_freq);
 
 		/* assign output port data */
-	  *self->p_freq_out = freq_avg;
+#ifdef __ARMEL__
+		if (fabsf (self->freq_last - freq_avg) > .1) {
+			*self->p_freq_out = freq_avg;
+			self->freq_last = freq_avg;
+		} else {
+			*self->p_freq_out = self->freq_last;
+		}
+		if (fabsf (self->cent_last - cent) > .02) {
+			*self->p_cent     = cent;
+			self->cent_last   = cent;
+		} else {
+			*self->p_cent     = self->cent_last;
+		}
+#else
+		*self->p_freq_out = freq_avg;
+		*self->p_cent     = cent;
+#endif
+
 	  *self->p_octave   = (note/12) -1;
 	  *self->p_note     = note%12;
-	  *self->p_cent     = cent;
 	  *self->p_error    = 100.0 * self->dll_e0 * note_freq / self->rate;
 
 	}
@@ -733,8 +768,18 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 	/* report input level
 	 * NB. 20 *log10f(sqrt(x)) == 10 * log10f(x) */
-	*self->p_rms = (rms_signal > .0000000001f) ? 10. * fast_log10(2 * rms_signal) : -100;
-	//*self->p_rms = (rms_postfilter > .0000000001f) ? 10. * fast_log10(2 * rms_postfilter) : -100;
+	const float rms = (rms_signal > .0000000001f) ? 10. * fast_log10(2 * rms_signal) : -100;
+	//const float rms = (rms_postfilter > .0000000001f) ? 10. * fast_log10(2 * rms_postfilter) : -100;
+#ifdef __ARMEL__
+	if (fabsf (self->rms_last - rms) > 1) {
+		*self->p_rms = rms;
+		self->rms_last = rms;
+	} else {
+		*self->p_rms = self->rms_last;
+	}
+#else
+	*self->p_rms = rms;
+#endif
 
 	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 
@@ -777,6 +822,7 @@ static const LV2_Descriptor descriptor ## ID = { \
 
 mkdesc_tuna(0, "one")
 mkdesc_tuna(1, "two")
+mkdesc_tuna(2, "mod")
 
 #undef LV2_SYMBOL_EXPORT
 #ifdef _WIN32
@@ -791,6 +837,7 @@ lv2_descriptor(uint32_t index)
 	switch (index) {
 		case  0: return &descriptor0;
 		case  1: return &descriptor1;
+		case  2: return &descriptor2;
 		default: return NULL;
 	}
 }

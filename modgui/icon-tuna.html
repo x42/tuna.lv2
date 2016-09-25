@@ -1,0 +1,49 @@
+<div class="mod-pedal x42-tuna{{{cns}}}">
+    <div mod-role="drag-handle" class="mod-drag-handle"></div>
+
+    <!-- <div class="x42-brand"><h1 title="Brought to you by x42.">x42</h1></div>-->
+    <div class="x42-plugin-name"><h1>x42 Tuna</h1></div>
+
+    <div class="mod-control-group clearfix">
+        <div class="mod-knob" title="This sets the frequency corresponding to 'A' pitch, in other words the required tuning. This will be the default 440 Hz in most cases.">
+            <span class="mod-knob-title">Tuning (A4)</span>
+            <div class="mod-knob-image" mod-role="input-control-port" mod-port-symbol="tuning"></div>
+        </div>
+    </div>
+
+		<div class="mod-tuner-display clearfix" mod-role="tuner-display">
+        <div class="mod-display-group">
+            <h2 mod-role="note">A</h2>
+            <h2 mod-role="octave">4</h2>
+            <div class="tuner-freq-info">
+                <div>@ <span contenteditable="true" mod-role="input-control-value" mod-port-symbol="tuning">440.10Hz<span></div>
+                <div>T: <span mod-role="target">110.00 Hz</span></div>
+            </div>
+        </div>
+        <div class="mod-display-group">
+            <h4 mod-role="adjust">&gt;&gt;&gt;&gt;&gt;&gt;</h4>
+        </div>
+        <div class="mod-display-group">
+            <h3 mod-role="cent">+00.00 ct</h3>
+            <h3 mod-role="freq">0000.00 Hz</h3>
+        </div>
+		</div>
+
+    <div class="mod-light on" mod-role="bypass-light"></div>
+    <div class="mod-footswitch" mod-role="bypass"></div>
+
+    <div class="mod-pedal-input">
+        {{#effect.ports.audio.input}}
+        <div class="mod-input mod-input-disconnected" title="{{name}}" mod-role="input-audio-port" mod-port-symbol="{{symbol}}">
+            <div class="mod-pedal-input-image"></div>
+        </div>
+        {{/effect.ports.audio.input}}
+    </div>
+    <div class="mod-pedal-output">
+        {{#effect.ports.audio.output}}
+        <div class="mod-output mod-output-disconnected" title="{{name}}" mod-role="output-audio-port" mod-port-symbol="{{symbol}}">
+            <div class="mod-pedal-output-image"></div>
+        </div>
+        {{/effect.ports.audio.output}}
+    </div>
+</div>

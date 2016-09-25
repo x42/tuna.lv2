@@ -1,0 +1,248 @@
+@import url(/fonts/nexa/stylesheet.css);
+@import url(/fonts/questrial/stylesheet.css);
+
+/* = CONTAINER
+================================================ */
+.x42-tuna{{{cns}}} {
+    background-image:url(/resources/box.png{{{ns}}});
+    background-position:center center;
+    background-repeat:no-repeat;
+    background-size:364px 431px;
+    height:431px;
+    position:absolute;
+    width:364px;
+    border-radius: 21px;
+
+    line-height:1.429;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+
+    border-color:white;
+    color:white;
+}
+
+/* = Labels
+================================================ */
+.x42-tuna{{{cns}}} .x42-brand {
+    left:0;
+    position:absolute;
+    right:0;
+    text-align:center;
+    top:180px;
+}
+
+.x42-tuna{{{cns}}} .x42-brand h1 {
+    border-radius:12px;
+    border-style:solid;
+    border-width:4px;
+    display:inline-block;
+    font-family:"Nexa";
+    font-size:32px;
+    padding:3px 9px 0;
+}
+
+.x42-tuna{{{cns}}} .x42-plugin-name {
+    left:30px;
+    overflow:hidden;
+    position:absolute;
+    right:30px;
+    text-align:center;
+    bottom:35px;
+}
+
+.x42-tuna{{{cns}}} .x42-plugin-name h1 {
+    font-family:"Questrial";
+    font-size:21px;
+    line-height:1;
+}
+
+/* = LIGHT ON/OFF
+================================================ */
+.x42-tuna{{{cns}}} .mod-light {
+    background-position:center center;
+    background-repeat:no-repeat;
+    height:32px;
+    left:10px;
+    position:absolute;
+    right:10px;
+    bottom:140px;
+}
+
+/* = FOOTSWITCH
+================================================ */
+.x42-tuna{{{cns}}} .mod-footswitch {
+    background-image:url(/resources/footswitch.png{{{ns}}});
+    background-position:bottom center;
+    background-repeat:no-repeat;
+    background-size:auto 132px;
+    bottom: 75px;
+    cursor:pointer;
+    height:66px;
+    left: 20px;
+    margin: auto;
+    position:absolute;
+    right: 20px;
+    width: 66px;
+}
+
+.x42-tuna{{{cns}}} .mod-tuner-display {
+    margin:0;
+    position:relative;
+    background-color:#ccaa66;
+    margin: 0 30px;
+    box-shadow: 2px 2px 2px 0px #000 inset, -1px -1px 1px 1px #888 inset;
+    color:black;
+}
+
+.x42-tuna{{{cns}}} .mod-tuner-display.good {
+    background-color:#ccff66;
+}
+
+.x42-tuna{{{cns}}} .mod-tuner-display.nosignal.good,
+.x42-tuna{{{cns}}} .mod-tuner-display.nosignal {
+    background-color:#776633;
+}
+
+.x42-tuna{{{cns}}} .tuner-freq-info {
+    position:absolute;
+    right:10px;
+    top:6px;
+}
+
+.x42-tuna{{{cns}}} .mod-display-group {
+    margin:0;
+    position:relative;
+    text-align:center;
+    z-index:30;
+}
+
+.x42-tuna{{{cns}}} .mod-display-group h2,
+.x42-tuna{{{cns}}} .mod-display-group h3,
+.x42-tuna{{{cns}}} .mod-display-group h4
+{
+    padding:0;
+    display:inline-block;
+    line-height:1em;
+}
+
+.x42-tuna{{{cns}}} .mod-display-group h2 {
+    font-size:32px;
+    margin:10px 0 5px 0;
+    width:64px;
+}
+
+.x42-tuna{{{cns}}} .mod-display-group h3 {
+    font-size:24px;
+    margin:5px 6px 10px 6px;
+    text-align:right;
+    width:135px;
+}
+
+.x42-tuna{{{cns}}} .mod-display-group h4 {
+    font-size:24px;
+    margin:0;
+    width:160px;
+}
+
+/* = KNOBS
+================================================ */
+.x42-tuna{{{cns}}} .mod-control-group {
+    margin:25px 10px 10px 10px !important;
+    position:relative;
+    text-align:center;
+    z-index:30;
+}
+
+.x42-tuna{{{cns}}} .mod-control-group .mod-knob {
+    overflow:hidden;
+    position:relative;
+    display:inline-block;
+    height:80px;
+    margin: 0 14px;
+}
+
+.x42-tuna{{{cns}}} .mod-control-group .mod-knob > span.mod-knob-title {
+    bottom:0px;
+    display:block;
+    font-size:11px;
+    font-weight:bold;
+    height:12px;
+    left:0;
+    line-height:1;
+    margin:0;
+    overflow:hidden;
+    padding:0;
+    position:absolute;
+    right:0;
+    text-transform:uppercase;
+}
+
+.x42-tuna{{{cns}}} .mod-control-group .mod-knob .mod-knob-image {
+    background-image:url(/resources/knob.png{{{ns}}});
+    background-repeat:no-repeat;
+    background-size:auto 60px;
+    height:60px;
+    width:60px;
+    margin:0 auto;
+}
+
+.x42-tuna{{{cns}}} .bottom-group {
+    margin:10px auto 0 auto;
+    left:10px;
+    right:10px;
+    position:absolute;
+    bottom:70px;
+}
+
+
+/* = ENUMERATED LIST
+================================================ */
+.x42-tuna{{{cns}}} .mod-enumerated-group {
+    height:31px;
+    margin:20px auto 0 !important;
+    position:relative;
+    width:190px;
+    z-index:35;
+}
+
+.x42-tuna{{{cns}}} .mod-enumerated {
+    background-image:url(/resources/dropdown-arrow-white.png{{{ns}}});
+    background-position:right center;
+    background-repeat:no-repeat;
+    font-size:11px;
+    font-weight:bold;
+    left:0;
+    line-height:2;
+    overflow:hidden;
+    position:absolute;
+    right:0;
+    text-align:center;
+}
+
+.x42-tuna{{{cns}}} .mod-enumerated .mod-enumerated-selected {
+    background-color:rgba(0,0,0,.3);
+    box-shadow:inset 0 0 4px rgba(0,0,0,.3);
+    border-radius:4px;
+    padding:3px 9px;
+    border-radius:4px 4px 0 0;
+}
+
+.x42-tuna{{{cns}}} .mod-enumerated .mod-enumerated-list {
+    background-color:rgba(0,0,0,.9);
+    color:#fff;
+    display:none;
+    height:115px;
+    overflow:auto;
+    position:relative;
+}
+
+.x42-tuna{{{cns}}} .mod-enumerated .mod-enumerated-list > div {
+    padding:3px 9px;
+}
+
+.x42-tuna{{{cns}}} .mod-enumerated .mod-enumerated-list > div:hover {
+    background-color:rgba(255,255,255,.2);
+    cursor:pointer;
+}
