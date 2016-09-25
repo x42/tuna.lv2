@@ -70,6 +70,17 @@ void debug_printf (const char *fmt,...) {}
 #include "spectr.c"
 #include "fft.c"
 
+#ifdef __ARMEL__
+// TODO also use for "#one" - to spread out load
+// [maybe] run fft in GUI thread for "#two"
+#define BACKGROUND_FFT
+#endif
+
+#ifdef BACKGROUND_FFT
+#include <pthread.h>
+#include "ringbuf.h"
+#endif
+
 /* recursively scan octave-overtones up to 4 octaves */
 static uint32_t fftx_scan_overtones(struct FFTAnalysis *ft,
 		const float threshold, uint32_t bin, uint32_t octave,
@@ -202,6 +213,16 @@ typedef struct {
 	float t_oct, v_oct;
 	float t_ovt, v_ovt;
 
+#ifdef BACKGROUND_FFT
+	pthread_mutex_t lock;
+	pthread_cond_t  signal;
+	pthread_t       thread;
+	bool            keep_running;
+
+	ringbuf*        to_fft;
+	ringbuf*        result;
+#endif
+
 	/* DLL */
 	bool dll_initialized;
 	uint32_t monotonic_cnt;
@@ -226,6 +247,65 @@ typedef struct {
 	bool spectr_active;
 
 } Tuna;
+
+#ifdef BACKGROUND_FFT
+static void* worker (void* arg) {
+	Tuna* self = (Tuna*)arg;
+	const float rms_omega  = self->rms_omega;
+	float rms_signal = 0;
+
+  pthread_mutex_lock (&self->lock);
+	while (self->keep_running) {
+		// wait for signal
+    pthread_cond_wait (&self->signal, &self->lock);
+
+		if (!self->keep_running) {
+			break;
+		}
+
+		size_t n_samples = rb_read_space (self->to_fft);
+		do {
+			if (n_samples < 1) {
+				break;
+			}
+			if (n_samples > 8192) {
+				n_samples = 8192;
+			}
+
+			float a_in[8192];
+			rb_read (self->to_fft, a_in, n_samples);
+
+			// TODO calc rms_signal in thread.
+			for (uint32_t n = 0; n < n_samples; ++n) {
+				rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
+			}
+
+			if (0 == fftx_run (self->fftx, n_samples, a_in)) {
+				// TODO optimize: split RB here, call _fftx_run ()
+				const float fft_peakfreq = fftx_find_note (self->fftx,
+						rms_signal * self->v_fft,
+						self->v_ovr, self->v_fun, self->v_oct, self->v_ovt);
+
+				rb_write (self->result, &fft_peakfreq, 1);
+			}
+
+			n_samples = rb_read_space (self->to_fft);
+		} while (n_samples > 0);
+	}
+  pthread_mutex_unlock (&self->lock);
+	return NULL;
+}
+
+static void feed_fft (Tuna* self, const float* data, size_t n_samples) {
+	rb_write (self->to_fft, data, n_samples);
+
+  if (pthread_mutex_trylock (&self->lock) == 0) {
+    pthread_cond_signal (&self->signal);
+    pthread_mutex_unlock (&self->lock);
+  }
+}
+#endif
+
 
 static LV2_Handle
 instantiate(
@@ -299,7 +379,7 @@ instantiate(
 	// https://en.wikipedia.org/wiki/Wiener%E2%80%93Khinchin_theorem
 	// http://miracle.otago.ac.nz/tartini/papers/A_Smarter_Way_to_Find_Pitch.pdf
 	// for "note finding"
-	fft_size = MIN(2048, fft_size);
+	fft_size = MIN(4096, fft_size);
 #endif
 
 	fftx_init(self->fftx, fft_size, rate, 0);
@@ -307,6 +387,24 @@ instantiate(
 	/* map LV2 Atom URIs */
 	map_tuna_uris(self->map, &self->uris);
 	lv2_atom_forge_init(&self->forge, self->map);
+
+#ifdef BACKGROUND_FFT
+	pthread_mutex_init (&self->lock, NULL);
+	pthread_cond_init (&self->signal, NULL);
+
+	self->to_fft = rb_alloc (32768);
+	self->result = rb_alloc (64);
+	self->keep_running = true;
+	if (pthread_create (&self->thread, NULL, worker, self)) {
+		pthread_mutex_destroy (&self->lock);
+		pthread_cond_destroy (&self->signal);
+		rb_free (self->to_fft);
+		rb_free (self->result);
+		fftx_free(self->fftx);
+		free (self);
+		return NULL;
+	}
+#endif
 
 	return (LV2_Handle)self;
 }
@@ -462,8 +560,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 	if (*self->p_t_ ## VAR != self->t_ ## VAR) { \
 		self->t_ ## VAR = *self->p_t_ ## VAR; \
 		self->v_ ## VAR = powf(10, .1 * self->t_ ## VAR); \
-	} \
-	const float v_ ## VAR = self->v_ ## VAR;
+	}
 
 	GET_THRESHOLD(rms)
 	GET_THRESHOLD(flt)
@@ -479,7 +576,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 	float rms_postfilter = self->rms_postfilter;
 	const float rms_omega  = self->rms_omega;
 	float freq = self->tuna_fc;
-	const float rms_threshold = v_rms;
+	const float rms_threshold = self->v_rms;
+	const float v_flt = self->v_flt;
 
 	/* initialize local vars */
 	float    detected_freq = 0;
@@ -504,9 +602,17 @@ run(LV2_Handle handle, uint32_t n_samples)
 		fft_active = true;
 	}
 
+#ifdef BACKGROUND_FFT
+	if (fft_active) {
+		feed_fft (self, a_in, n_samples);
+	} else {
+		rb_read_clear (self->result);
+	}
+#else
 	if (fft_active || self->spectr_active) {
 		fft_ran_this_cycle = 0 == fftx_run(self->fftx, n_samples, a_in);
 	}
+#endif
 
 	/* Process incoming events from GUI */
 	if (self->control) {
@@ -532,6 +638,10 @@ run(LV2_Handle handle, uint32_t n_samples)
 	if (fft_ran_this_cycle && self->spectr_active) {
 		tx_spectrum(self, self->fftx);
 	}
+
+#ifdef BACKGROUND_FFT
+	fft_ran_this_cycle = rb_read_space (self->result) > 0;
+#endif
 
 	/* process every sample */
 	for (uint32_t n = 0; n < n_samples; ++n) {
@@ -560,7 +670,12 @@ run(LV2_Handle handle, uint32_t n_samples)
 		if (fft_ran_this_cycle && !fft_proc_this_cycle) {
 			fft_proc_this_cycle = true;
 			/* get lowest peak frequency */
-			const float fft_peakfreq = fftx_find_note(self->fftx, rms_signal * v_fft, v_ovr, v_fun, v_oct, v_ovt);
+#ifdef BACKGROUND_FFT
+			float fft_peakfreq = 0;
+			while (0 == rb_read_one (self->result, &fft_peakfreq)) ;
+#else
+			const float fft_peakfreq = fftx_find_note(self->fftx, rms_signal * self->v_fft, self->v_ovr, self->v_fun, self->v_oct, self->v_ovt);
+#endif
 			if (fft_peakfreq < 20) {
 				self->fft_note_count = 0;
 			} else {
@@ -793,6 +908,20 @@ static void
 cleanup(LV2_Handle handle)
 {
 	Tuna* self = (Tuna*)handle;
+
+#ifdef BACKGROUND_FFT
+  pthread_mutex_lock (&self->lock);
+	self->keep_running = false;
+	pthread_cond_signal (&self->signal);
+	pthread_mutex_unlock (&self->lock);
+	pthread_join (self->thread, NULL);
+
+	pthread_mutex_destroy (&self->lock);
+	pthread_cond_destroy (&self->signal);
+	rb_free (self->to_fft);
+	rb_free (self->result);
+#endif
+
 	fftx_free(self->fftx);
 	free(handle);
 }
