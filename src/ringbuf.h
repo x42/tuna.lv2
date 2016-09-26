@@ -1,19 +1,24 @@
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 typedef struct {
 	float* data;
 	size_t rp;
 	size_t wp;
 	size_t len;
+	size_t mask;
 } ringbuf;
 
 static ringbuf* rb_alloc (size_t siz) {
 	ringbuf* rb = (ringbuf*) malloc (sizeof (ringbuf));
-	rb->data = (float*) malloc (siz * sizeof(float));
-	rb->len = siz;
+	size_t power_of_two;
+	for (power_of_two = 1; 1U << power_of_two < siz; ++power_of_two);
+	rb->len = 1 << power_of_two;
+	rb->mask = rb->len -1;
 	rb->rp = 0;
 	rb->wp = 0;
+	rb->data = (float*) malloc (rb->len * sizeof(float));
 	return rb;
 }
 
@@ -26,11 +31,11 @@ static size_t rb_write_space (ringbuf* rb) {
 	if (rb->rp == rb->wp) {
 		return (rb->len - 1);
 	}
-	return ((rb->len + rb->rp - rb->wp) % rb->len) -1;
+	return ((rb->len + rb->rp - rb->wp) & rb->mask) - 1;
 }
 
 static size_t rb_read_space (ringbuf* rb) {
-	return ((rb->len + rb->wp - rb->rp) % rb->len);
+	return ((rb->len + rb->wp - rb->rp) & rb->mask);
 }
 
 static int rb_read_one (ringbuf* rb, float* data) {
@@ -38,7 +43,7 @@ static int rb_read_one (ringbuf* rb, float* data) {
 		return -1;
 	}
 	*data = rb->data[rb->rp];
-	rb->rp = (rb->rp + 1) % rb->len;
+	rb->rp = (rb->rp + 1) & rb->mask;
 	return 0;
 }
 
@@ -54,7 +59,7 @@ static ssize_t rb_read (ringbuf* rb, float* data, size_t len) {
 		memcpy ((void*) data,        (void*) &rb->data[rb->rp], part * sizeof (float));
 		memcpy ((void*) &data[part], (void*) rb->data,          remn * sizeof (float));
 	}
-	rb->rp = (rb->rp + len) % rb->len;
+	rb->rp = (rb->rp + len) & rb->mask;
 	return 0;
 }
 
@@ -70,7 +75,7 @@ static int rb_write (ringbuf* rb, const float* data, size_t len) {
 		memcpy ((void*) &rb->data[rb->wp], (void*) data,        part * sizeof (float));
 		memcpy ((void*) rb->data,          (void*) &data[part], remn * sizeof (float));
 	}
-	rb->wp = (rb->wp + len) % rb->len;
+	rb->wp = (rb->wp + len) & rb->mask;
 	return 0;
 }
 
