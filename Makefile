@@ -256,7 +256,7 @@ ifneq ($(BUILDOPENGL), no)
 endif
 
 DSP_SRC = src/tuna.c
-DSP_DEPS = $(DSP_SRC) src/spectr.c src/fft.c src/tuna.h
+DSP_DEPS = $(DSP_SRC) src/spectr.c src/fft.c src/tuna.h src/ringbuf.h
 GUI_DEPS =
 
 $(BUILDDIR)$(LV2NAME)$(LIB_EXT): $(DSP_DEPS) Makefile

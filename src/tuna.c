@@ -275,18 +275,21 @@ static void* worker (void* arg) {
 			float a_in[8192];
 			rb_read (self->to_fft, a_in, n_samples);
 
-			// TODO calc rms_signal in thread.
 			for (uint32_t n = 0; n < n_samples; ++n) {
 				rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
 			}
 
-			if (0 == fftx_run (self->fftx, n_samples, a_in)) {
-				// TODO optimize: split RB here, call _fftx_run ()
-				const float fft_peakfreq = fftx_find_note (self->fftx,
-						rms_signal * self->v_fft,
-						self->v_ovr, self->v_fun, self->v_oct, self->v_ovt);
+			if (rms_signal > .00000001f) {
+				if (0 == fftx_run (self->fftx, n_samples, a_in)) {
+					// TODO optimize: split RB here, call _fftx_run ()
+					const float fft_peakfreq = fftx_find_note (self->fftx,
+							rms_signal * self->v_fft,
+							self->v_ovr, self->v_fun, self->v_oct, self->v_ovt);
 
-				rb_write (self->result, &fft_peakfreq, 1);
+					if (fft_peakfreq > 0) {
+						rb_write (self->result, &fft_peakfreq, 1);
+					}
+				}
 			}
 
 			n_samples = rb_read_space (self->to_fft);
@@ -392,8 +395,8 @@ instantiate(
 	pthread_mutex_init (&self->lock, NULL);
 	pthread_cond_init (&self->signal, NULL);
 
-	self->to_fft = rb_alloc (32768);
-	self->result = rb_alloc (64);
+	self->to_fft = rb_alloc (fft_size * 8);
+	self->result = rb_alloc (32);
 	self->keep_running = true;
 	if (pthread_create (&self->thread, NULL, worker, self)) {
 		pthread_mutex_destroy (&self->lock);
@@ -852,7 +855,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 
 		/* assign output port data */
 #ifdef __ARMEL__
-		if (fabsf (self->freq_last - freq_avg) > .1) {
+		if (fabsf (self->freq_last - freq_avg) > .05) {
 			*self->p_freq_out = freq_avg;
 			self->freq_last = freq_avg;
 		} else {
