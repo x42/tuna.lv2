@@ -119,7 +119,7 @@ static float fftx_find_note(struct FFTAnalysis *ft,
 	uint32_t fundamental = 0;
 	uint32_t octave = 0;
 	float peak_dat = 0;
-	const uint32_t brkpos = ft->data_size * 6000 / ft->rate;
+	const uint32_t brkpos = ft->data_size * 8000 / ft->rate;
 	float threshold = abs_threshold;
 
 	for (uint32_t i = 1; i < brkpos; ++i) {
@@ -382,7 +382,7 @@ instantiate(
 	// https://en.wikipedia.org/wiki/Wiener%E2%80%93Khinchin_theorem
 	// http://miracle.otago.ac.nz/tartini/papers/A_Smarter_Way_to_Find_Pitch.pdf
 	// for "note finding"
-	fft_size = MIN(4096, fft_size);
+	fft_size = MIN(16384, fft_size);
 #endif
 
 	fftx_init(self->fftx, fft_size, rate, 0);
