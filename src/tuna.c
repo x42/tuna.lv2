@@ -1002,7 +1002,7 @@ tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 #ifdef WITH_SIGNATURE
 	if (!is_licensed (handle)) { return NULL; }
 #endif
-	uint32_t h = MAX (16, MIN (1 | (uint32_t)ceilf (w / 6.f), max_h));
+	uint32_t h = MAX (32, MIN (1 | (uint32_t)ceilf (w / 3.f), max_h));
 
 	static const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 
@@ -1017,7 +1017,7 @@ tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 		if (self->font) {
 			pango_font_description_free (self->font);
 		}
-		snprintf(txt, 32, "Mono %.0fpx", floor (h * .75));
+		snprintf(txt, 32, "Mono %.0fpx", floor (h * .375));
 		self->font = pango_font_description_from_string (txt);
 	}
 	cairo_t* cr = cairo_create (self->display);
@@ -1067,14 +1067,14 @@ tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 
 	cairo_set_dash(cr, dash1, 1, self->ui_strobe_phase * -2.);
 	cairo_set_line_width(cr, 8.0);
-	cairo_move_to(cr, 0, h * .5);
-	cairo_line_to(cr, w, h * .5);
+	cairo_move_to(cr, 0, h * .75);
+	cairo_line_to(cr, w, h * .75);
 	cairo_stroke (cr);
 
 	cairo_set_dash(cr, dash2, 1, -self->ui_strobe_phase);
 	cairo_set_line_width(cr, 16.0);
-	cairo_move_to(cr, 0, h * .5);
-	cairo_line_to(cr, w, h * .5);
+	cairo_move_to(cr, 0, h * .75);
+	cairo_line_to(cr, w, h * .75);
 	cairo_stroke (cr);
 	cairo_restore(cr);
 
@@ -1089,7 +1089,7 @@ tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 	pango_layout_set_font_description (pl, self->font);
 	pango_layout_set_text (pl, txt, -1);
 	pango_layout_get_pixel_size (pl, &tw, &th);
-	cairo_move_to (cr, 0.5 * (w - tw), 0.5 * (h - th));
+	cairo_move_to (cr, 0.5 * (w - tw), 0.25 * h - .5 * th);
 #if 0
 	cairo_set_source_rgba (cr, 1, 1, 1, 1);
 	pango_cairo_show_layout (cr, pl);
