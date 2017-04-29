@@ -30,6 +30,12 @@
 
 #include "lv2/lv2plug.in/ns/lv2core/lv2.h"
 
+#ifdef DISPLAY_INTERFACE
+#include <cairo/cairo.h>
+#include <pango/pangocairo.h>
+#include "lv2_rgext.h"
+#endif
+
 #ifndef MIN
 #define MIN(A,B) ( (A) < (B) ? (A) : (B) )
 #endif
@@ -246,6 +252,19 @@ typedef struct {
 	/* Spectrum */
 	bool spectr_active;
 
+#ifdef DISPLAY_INTERFACE
+	LV2_Inline_Display_Image_Surface surf;
+	PangoFontDescription*  font;
+	cairo_surface_t*       display;
+	LV2_Inline_Display*    queue_draw;
+	uint32_t               w, h;
+	uint32_t               fps_cnt;
+	uint32_t               aspvf;
+	float                  ui_strobe_dpy;
+	float                  ui_strobe_phase;
+	int                    guard1, guard2;
+	float ui_note, ui_octave, ui_cent, ui_strobe_tme;
+#endif
 } Tuna;
 
 #ifdef BACKGROUND_FFT
@@ -326,6 +345,11 @@ instantiate(
 		if (!strcmp(features[i]->URI, LV2_URID__map)) {
 			self->map = (LV2_URID_Map*)features[i]->data;
 		}
+#ifdef DISPLAY_INTERFACE
+		else if (!strcmp(features[i]->URI, LV2_INLINEDISPLAY__queue_draw)) {
+			self->queue_draw = (LV2_Inline_Display*) features[i]->data;
+		}
+#endif
 	}
 	if (!self->map) {
 		fprintf(stderr, "tuna.lv2 error: Host does not support urid:map\n");
@@ -408,7 +432,9 @@ instantiate(
 		return NULL;
 	}
 #endif
-
+#ifdef DISPLAY_INTERFACE
+	self->aspvf = rate / 25;
+#endif
 	return (LV2_Handle)self;
 }
 
@@ -905,6 +931,24 @@ run(LV2_Handle handle, uint32_t n_samples)
 	if (self->a_in != self->a_out) {
 		memcpy(self->a_out, self->a_in, sizeof(float) * n_samples);
 	}
+
+#ifdef DISPLAY_INTERFACE
+	if (self->queue_draw) {
+		self->fps_cnt += n_samples;
+		if (self->fps_cnt > self->aspvf) {
+			self->fps_cnt = self->fps_cnt % self->aspvf;
+
+			self->guard1++;
+			self->ui_octave = *self->p_octave;
+			self->ui_note = *self->p_note;
+			self->ui_cent = *self->p_cent;
+			self->ui_strobe_tme = *self->p_strobe;
+			self->guard2++;
+
+			self->queue_draw->queue_draw (self->queue_draw->handle);
+		}
+	}
+#endif
 }
 
 static void
@@ -912,6 +956,14 @@ cleanup(LV2_Handle handle)
 {
 	Tuna* self = (Tuna*)handle;
 
+#ifdef DISPLAY_INTERFACE
+	if (self->display) {
+		cairo_surface_destroy (self->display);
+	}
+	if (self->font) {
+		pango_font_description_free (self->font);
+	}
+#endif
 #ifdef BACKGROUND_FFT
   pthread_mutex_lock (&self->lock);
 	self->keep_running = false;
@@ -929,14 +981,160 @@ cleanup(LV2_Handle handle)
 	free(handle);
 }
 
+/******************************************************************************
+ * Inline Display
+ */
+
+static LV2_Inline_Display_Image_Surface *
+fil4_render(LV2_Handle handle, uint32_t w, uint32_t max_h)
+{
+#ifdef WITH_SIGNATURE
+	if (!is_licensed (instance)) { return NULL; }
+#endif
+	uint32_t h = MAX (16, MIN (1 | (uint32_t)ceilf (w / 6.f), max_h));
+
+	static const char notename[12][3] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+	Tuna* self = (Tuna*)handle;
+	char txt[32];
+
+	if (!self->display || self->w != w || self->h != h) {
+		if (self->display) cairo_surface_destroy(self->display);
+		self->display = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, w, h);
+		self->w = w;
+		self->h = h;
+		if (self->font) {
+			pango_font_description_free (self->font);
+		}
+		snprintf(txt, 32, "Mono %.0fpx", floor (h * .75));
+		self->font = pango_font_description_from_string (txt);
+	}
+	cairo_t* cr = cairo_create (self->display);
+	cairo_rectangle (cr, 0, 0, w, h);
+	cairo_set_source_rgba (cr, .2, .2, .2, 1.0);
+	cairo_fill (cr);
+
+	float ui_octave;
+	float ui_note;
+	float ui_cent;
+	float ui_strobe_tme;
+
+	int tries = 0;
+	do {
+		if (tries == 10) {
+			tries = 0;
+			sched_yield ();
+		}
+		ui_octave = self->ui_octave;
+		ui_note = self->ui_note;
+		ui_cent = self->ui_cent;
+		ui_strobe_tme = self->ui_strobe_tme;
+		++tries;
+	} while (self->guard1 != self->guard2);
+
+	/* strobe setup */
+	cairo_set_source_rgba (cr, .5, .5, .5, .8);
+	if (self->ui_strobe_dpy != ui_strobe_tme) {
+		if (ui_strobe_tme > self->ui_strobe_dpy) {
+			float tdiff = ui_strobe_tme - self->ui_strobe_dpy;
+			self->ui_strobe_phase += tdiff * ui_cent * 4;
+			if (fabsf (ui_cent) < 5) {
+				cairo_set_source_rgba (cr, .2, .9, .2, .7);
+			} else if (fabsf (ui_cent) < 10) {
+				cairo_set_source_rgba (cr, .8, .8, .0, .7);
+			} else {
+				cairo_set_source_rgba (cr, .9, .2, .2, .7);
+			}
+		}
+		self->ui_strobe_dpy = ui_strobe_tme;
+	}
+
+	/* render strobe */
+	cairo_save(cr);
+	const double dash1[] = {8.0};
+	const double dash2[] = {16.0};
+
+	cairo_set_dash(cr, dash1, 1, self->ui_strobe_phase * -2.);
+	cairo_set_line_width(cr, 8.0);
+	cairo_move_to(cr, 0, h * .5);
+	cairo_line_to(cr, w, h * .5);
+	cairo_stroke (cr);
+
+	cairo_set_dash(cr, dash2, 1, -self->ui_strobe_phase);
+	cairo_set_line_width(cr, 16.0);
+	cairo_move_to(cr, 0, h * .5);
+	cairo_line_to(cr, w, h * .5);
+	cairo_stroke (cr);
+	cairo_restore(cr);
+
+	/* render text */
+	int tw, th;
+	if (fabsf (ui_cent) < 100) {
+		snprintf(txt, 32, "%-2s%.0f %+3.0f\u00A2", notename[(int)ui_note], ui_octave, ui_cent);
+	} else {
+		snprintf(txt, 32, "%-2s%.0f", notename[(int)ui_note], ui_octave);
+	}
+	PangoLayout * pl = pango_cairo_create_layout (cr);
+	pango_layout_set_font_description (pl, self->font);
+	pango_layout_set_text (pl, txt, -1);
+	pango_layout_get_pixel_size (pl, &tw, &th);
+	cairo_move_to (cr, 0.5 * (w - tw), 0.5 * (h - th));
+#if 0
+	cairo_set_source_rgba (cr, 1, 1, 1, 1);
+	pango_cairo_show_layout (cr, pl);
+#else
+	pango_cairo_layout_path (cr, pl);
+	cairo_set_line_width(cr, 2.5);
+	cairo_set_source_rgba (cr, 0, 0, 0, .5);
+	cairo_stroke_preserve (cr);
+	cairo_set_source_rgba (cr, 1, 1, 1, 1);
+	cairo_fill (cr);
+#endif
+	g_object_unref(pl);
+
+	/* finish surface */
+	cairo_destroy (cr);
+	cairo_surface_flush (self->display);
+	self->surf.width = cairo_image_surface_get_width (self->display);
+	self->surf.height = cairo_image_surface_get_height (self->display);
+	self->surf.stride = cairo_image_surface_get_stride (self->display);
+	self->surf.data = cairo_image_surface_get_data  (self->display);
+
+	return &self->surf;
+}
+
 
 /******************************************************************************
  * LV2 setup
  */
 
+#ifdef WITH_SIGNATURE
+#define RTK_URI TUNA_URI
+#include "gpg_init.c"
+#include WITH_SIGNATURE
+struct license_info license_infos = {
+	"x42-Tuner",
+	"http://x42-plugins.com/x42/x42-tuner"
+};
+#include "gpg_lv2ext.c"
+#endif
+
 const void*
 extension_data(const char* uri)
 {
+#ifdef DISPLAY_INTERFACE
+	static const LV2_Inline_Display_Interface display  = { fil4_render };
+	if (!strcmp(uri, LV2_INLINEDISPLAY__interface)) {
+#if (defined _WIN32 && defined RTK_STATIC_INIT)
+		static int once = 0;
+		if (!once) {once = 1; gobject_init_ctor();}
+#endif
+		return &display;
+	}
+#endif
+#ifdef WITH_SIGNATURE
+	LV2_LICENSE_EXT_C
+#endif
 	return NULL;
 }
 
