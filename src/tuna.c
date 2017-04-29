@@ -981,15 +981,26 @@ cleanup(LV2_Handle handle)
 	free(handle);
 }
 
+#ifdef WITH_SIGNATURE
+#define RTK_URI TUNA_URI
+#include "gpg_init.c"
+#include WITH_SIGNATURE
+struct license_info license_infos = {
+	"x42-Tuner",
+	"http://x42-plugins.com/x42/x42-tuner"
+};
+#include "gpg_lv2ext.c"
+#endif
+
 /******************************************************************************
  * Inline Display
  */
 
 static LV2_Inline_Display_Image_Surface *
-fil4_render(LV2_Handle handle, uint32_t w, uint32_t max_h)
+tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 {
 #ifdef WITH_SIGNATURE
-	if (!is_licensed (instance)) { return NULL; }
+	if (!is_licensed (handle)) { return NULL; }
 #endif
 	uint32_t h = MAX (16, MIN (1 | (uint32_t)ceilf (w / 6.f), max_h));
 
@@ -1103,27 +1114,14 @@ fil4_render(LV2_Handle handle, uint32_t w, uint32_t max_h)
 	return &self->surf;
 }
 
-
 /******************************************************************************
  * LV2 setup
  */
-
-#ifdef WITH_SIGNATURE
-#define RTK_URI TUNA_URI
-#include "gpg_init.c"
-#include WITH_SIGNATURE
-struct license_info license_infos = {
-	"x42-Tuner",
-	"http://x42-plugins.com/x42/x42-tuner"
-};
-#include "gpg_lv2ext.c"
-#endif
-
 const void*
 extension_data(const char* uri)
 {
 #ifdef DISPLAY_INTERFACE
-	static const LV2_Inline_Display_Interface display  = { fil4_render };
+	static const LV2_Inline_Display_Interface display  = { tuna_render };
 	if (!strcmp(uri, LV2_INLINEDISPLAY__interface)) {
 #if (defined _WIN32 && defined RTK_STATIC_INIT)
 		static int once = 0;
