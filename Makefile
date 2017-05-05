@@ -210,7 +210,7 @@ ROBGL+= Makefile
 
 JACKCFLAGS=-I. $(CXXFLAGS) $(LIC_CFLAGS)
 JACKCFLAGS+=`pkg-config --cflags jack lv2 pango pangocairo fftw3f $(PKG_GL_LIBS)`
-JACKLIBS=-lm $(GLUILIBS) $(LIC_LOADLIBES) $(LOADLIBES)
+JACKLIBS=-lm $(GLUILIBS) $(LOADLIBES)
 
 ###############################################################################
 # build target definitions
