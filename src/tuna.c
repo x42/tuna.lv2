@@ -996,6 +996,7 @@ struct license_info license_infos = {
  * Inline Display
  */
 
+#ifdef DISPLAY_INTERFACE
 static LV2_Inline_Display_Image_Surface *
 tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 {
@@ -1113,6 +1114,7 @@ tuna_render (LV2_Handle handle, uint32_t w, uint32_t max_h)
 
 	return &self->surf;
 }
+#endif
 
 /******************************************************************************
  * LV2 setup
