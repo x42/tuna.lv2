@@ -87,6 +87,10 @@
     width: 66px;
 }
 
+.x42-tuna{{{cns}}} .mod-footswitch.on {
+    background-position:top center;
+}
+
 .x42-tuna{{{cns}}} .mod-tuner-display {
     margin:0;
     position:relative;
