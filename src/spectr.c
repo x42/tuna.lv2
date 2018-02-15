@@ -31,6 +31,9 @@
 # define creal(XX) std::real(XX)
 # define cimag(XX) std::imag(XX)
 # define _I ((complex_t)(1i))
+  #ifdef __cpp_lib_complex_udls
+    using namespace std::literals::complex_literals;
+  #endif
   typedef std::complex<double> complex_t;
 #else
 # include <complex.h>
