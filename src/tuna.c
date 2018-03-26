@@ -829,7 +829,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 						dfreq0, dfreq2, self->dll_e0, (self->dll_t1 - self->dll_t0) - self->dll_e2);
 
 				float dfreq;
-				if (fabsf(self->dll_e0 * freq / self->rate) > .02) {
+				if (fabs(self->dll_e0 * freq / self->rate) > .02) {
 					dfreq = dfreq0;
 				} else {
 					dfreq = dfreq2;
