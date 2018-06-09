@@ -25,7 +25,7 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#if __cplusplus >= 201103L || (defined __APPLE__ && defined __cplusplus)
+#if __cplusplus >= 201103L || (defined __APPLE__ && defined __cplusplus) || defined __FreeBSD__
 # include <complex>
 # define csqrt(XX) std::sqrt(XX)
 # define creal(XX) std::real(XX)
