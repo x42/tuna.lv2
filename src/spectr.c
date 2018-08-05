@@ -25,7 +25,7 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#if __cplusplus >= 201103L || (defined __APPLE__ && defined __cplusplus) || defined __FreeBSD__
+#if __cplusplus >= 201103L || ((defined __APPLE__ || defined __FreeBSD__) && defined __cplusplus)
 # include <complex>
 # define csqrt(XX) std::sqrt(XX)
 # define creal(XX) std::real(XX)
@@ -45,14 +45,15 @@ enum filterCoeff {a0 = 0, a1, a2, b0, b1, b2};
 enum filterState {z1 = 0, z2};
 
 #define NODENORMAL (1e-12)
+#define MAXORDER (6)
 
 struct Filter {
-	double W[6];
+	double W[MAXORDER];
 	double z[2];
 };
 
 struct FilterBank {
-	struct Filter f[6];
+	struct Filter f[MAXORDER];
 	uint32_t filter_stages;
 	bool ac;
 };
@@ -60,15 +61,15 @@ struct FilterBank {
 static inline double
 proc_one(struct Filter * const f, const double in)
 {
-	const double w   = in - f->W[a1]*f->z[z1] - f->W[a2]*f->z[z2];
-	const double out =      f->W[b0]*w        + f->W[b1]*f->z[z1] + f->W[b2]*f->z[z2];
-	f->z[z2] = f->z[z1];
-	f->z[z1] = w;
-	return out;
+
+	const double y = f->W[b0] * in + f->z[z1];
+	f->z[z1]       = f->W[b1] * in - f->W[a1] * y + f->z[z2];
+	f->z[z2]       = f->W[b2] * in - f->W[a2] * y;
+	return y;
 }
 
 static inline float
-bandpass_process(struct FilterBank * const fb, float in)
+bandpass_process(struct FilterBank * const fb, const float in)
 {
 	fb->ac = !fb->ac;
 	double out = in + ((fb->ac) ? NODENORMAL : -NODENORMAL);
@@ -89,7 +90,7 @@ bandpass_setup(struct FilterBank *fb,
 	/* must be an even number for the algorithm below */
 	fb->filter_stages = order;
 
-	assert (order > 0 && (order%2) == 0);
+	assert (order > 0 && (order%2) == 0 && order <= MAXORDER);
 	assert (band > 0);
 
 	for (uint32_t i = 0; i < fb->filter_stages; ++i) {
@@ -186,6 +187,7 @@ bandpass_setup(struct FilterBank *fb,
 	fb->f[0].W[b2] *= creal(scale);
 
 #ifdef DEBUG_SPECTR
+	printf("CFG SR:%f FQ:%f BW:%f O:%d\n", rate, freq, band, order);
 	printf("SCALE (%g,  %g)\n", creal(scale), cimag(scale));
 	for (uint32_t i = 0; i < fb->filter_stages; ++i) {
 		struct Filter *flt = &fb->f[i];
