@@ -9,7 +9,8 @@
   @UITTL@
   @MODBRAND@
   @MODLABEL@
-  lv2:optionalFeature lv2:hardRTCapable ;
+  lv2:optionalFeature lv2:hardRTCapable, idpy:queue_draw ;
+	lv2:extensionData idpy:interface ;
   lv2:requiredFeature urid:map ;
   @SIGNATURE@
   lv2:port
