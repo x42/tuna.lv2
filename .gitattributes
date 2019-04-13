@@ -5,4 +5,4 @@
 /img/tuna*.png export-ignore
 /img/*.icns export-ignore
 /img/*.ico export-ignore
-/static_fft.sh export-ignore
+/modgui export-ignore
