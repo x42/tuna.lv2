@@ -93,17 +93,14 @@ static uint32_t fftx_scan_overtones(struct FFTAnalysis *ft,
 		const float v_oct2)
 {
 	const float scan  = MAX(2, (float) bin * .1f);
-	float peak_dat = 0;
 	uint32_t peak_pos = 0;
 	for (uint32_t i = MAX(1, floorf(bin-scan)); i < ceilf(bin+scan); ++i) {
 		if (
 				   ft->power[i] > threshold
-				&& ft->power[i] > peak_dat
 				&& ft->power[i] > ft->power[i-1]
 				&& ft->power[i] > ft->power[i+1]
 			 ) {
 			peak_pos = i;
-			peak_dat = ft->power[i];
 			debug_printf("ovt: bin %d oct %d th-fact: %f\n", i, octave, 10.0 * fast_log10(ft->power[i]/ threshold));
 			break;
 		}
