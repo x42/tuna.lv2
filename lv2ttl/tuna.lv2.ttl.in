@@ -27,13 +27,14 @@
     a atom:AtomPort ,
       lv2:OutputPort ;
     atom:bufferType atom:Sequence ;
+		atom:supports <http://lv2plug.in/ns/ext/midi#MidiEvent> ;
     lv2:designation lv2:control ;
     lv2:index 1 ;
-    lv2:symbol "notify" ;
-    lv2:name "Notify" ;
-    # 2 * 512 * sizeof(float) + LV2-Atoms
-    rsz:minimumSize 4352;
-    rdfs:comment "Plugin to GUI communication" ;
+    lv2:symbol "sysex" ;
+    lv2:name "MTS SysEx" ;
+    # 2 * 512 * sizeof(float) + sysex + LV2-Atoms
+    rsz:minimumSize 4608;
+    rdfs:comment "MTS/SysEx output and Plugin to GUI communication" ;
   ] , [
     a lv2:AudioPort ,
       lv2:InputPort ;

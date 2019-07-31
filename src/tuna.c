@@ -536,6 +536,44 @@ static void tx_spectrum(Tuna *self, struct FFTAnalysis *ft)
 	lv2_atom_forge_pop(&self->forge, &frame);
 }
 
+static void mts (Tuna *self, const int note, const float cent) {
+	if ((note < 0 || note > 127) || (note == 0 && cent < 0)) {
+		return;
+	}
+
+	if (cent < -50.f || cent > 50.f) {
+		return;
+	}
+
+	uint8_t nn = note & 127;
+	uint16_t cc = floorf (163.83 * ((cent >= 0) ? cent : (100.f - cent)));
+
+	// http://www.microtonal-synthesis.com/MIDItuning.html
+	// http://technogems.blogspot.com/2018/07/using-midi-tuning-specification-mts.html
+	uint8_t syx[12];
+
+	syx[0] = 0xf0;
+	syx[1] = 0x7f; // realtime sysex
+	syx[2] = 0x7f; // target-id
+	syx[3] = 0x08; // tuning..
+	syx[4] = 0x02; // ..request
+	syx[5] = 0x00; // tuning program number
+	syx[6] = 0x01; // number of notes to be changed
+
+	syx[7]  = nn;
+	syx[8]  = (cent >= 0) ? nn : (nn - 1);
+	syx[9]  = cc >> 7;
+	syx[10] = cc & 127;
+	syx[11] = 0xf7;
+
+	LV2_Atom midiatom;
+	midiatom.type = self->uris.midi_Event;
+	midiatom.size = 12;
+	lv2_atom_forge_frame_time (&self->forge, 0);
+	lv2_atom_forge_raw (&self->forge, &midiatom, sizeof(LV2_Atom));
+	lv2_atom_forge_raw (&self->forge, syx, 12);
+	lv2_atom_forge_pad (&self->forge, sizeof(LV2_Atom) + midiatom.size);
+}
 
 /* round frequency to the closest note on the given scale.
  * use midi notation 0..127 for note-names
@@ -858,9 +896,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 		self->monotonic_cnt += n_samples;
 	}
 
-	/* close off atom sequence */
-	lv2_atom_forge_pop(&self->forge, &self->frame);
-
 	/* post-processing and data-output */
 	if (detected_count > 0) {
 		/* calculate average of detected frequency */
@@ -875,6 +910,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 		 * One cent is one hundredth part of the semitone in 12-tone equal temperament
 		 */
 		const float cent = 1200.0 * log2(freq_avg / note_freq);
+
+		// TODO rate-limit cent difference
+		mts (self, note, cent);
 
 		/* assign output port data */
 #ifdef __ARMEL__
@@ -906,6 +944,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 	  *self->p_error = 0;
 	}
 	/* else { no change, maybe short cycle } */
+
+	/* close off atom sequence */
+	lv2_atom_forge_pop(&self->forge, &self->frame);
 
 	/* report input level
 	 * NB. 20 *log10f(sqrt(x)) == 10 * log10f(x) */

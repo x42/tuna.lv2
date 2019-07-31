@@ -13,7 +13,7 @@ static const RtkLv2Description _plugin_tuna_one = {
 	, (const struct LV2Port[20])
 	{
 		{ "control", ATOM_IN, nan, nan, nan, "GUI to plugin communication"},
-		{ "notify", ATOM_OUT, nan, nan, nan, "Plugin to GUI communication"},
+		{ "sysex", MIDI_OUT, nan, nan, nan, "MTS/SysEx output and Plugin to GUI communication"},
 		{ "in", AUDIO_IN, nan, nan, nan, "Audio Input"},
 		{ "out", AUDIO_OUT, nan, nan, nan, "Audio output"},
 		{ "mode", CONTROL_IN, 0.000000, 0.000000, 8000.000000, "Mode"},
@@ -37,9 +37,9 @@ static const RtkLv2Description _plugin_tuna_one = {
 	, 1 // uint32_t nports_audio_in
 	, 1 // uint32_t nports_audio_out
 	, 0 // uint32_t nports_midi_in
-	, 0 // uint32_t nports_midi_out
+	, 1 // uint32_t nports_midi_out
 	, 1 // uint32_t nports_atom_in
-	, 1 // uint32_t nports_atom_out
+	, 0 // uint32_t nports_atom_out
 	, 16 // uint32_t nports_ctrl
 	, 9 // uint32_t nports_ctrl_in
 	, 7 // uint32_t nports_ctrl_out
