@@ -27,6 +27,6 @@ idpy:interface a lv2:ExtensionData .
 <http://gareus.org/oss/lv2/@LV2NAME@>
 	a doap:Project;
 	doap:maintainer <http://gareus.org/rgareus#me> ;
-	doap:name "Instrument Tuner" .
+	doap:name "x42 Instrument Tuner" .
 
 

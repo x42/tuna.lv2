@@ -4,7 +4,7 @@
   a lv2:Plugin, doap:Project, lv2:AnalyserPlugin;
   doap:license <http://usefulinc.com/doap/licenses/gpl> ;
   doap:maintainer <http://gareus.org/rgareus#me> ;
-  doap:name "Instrument Tuner@NAME_SUFFIX@";
+  doap:name "x42 Instrument Tuner@NAME_SUFFIX@";
   @VERSION@
   @UITTL@
   @MODBRAND@

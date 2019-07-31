@@ -9,7 +9,7 @@ static const RtkLv2Description _plugin_tuna_one = {
 	&lv2ui_descriptor
 	, 0 // uint32_t dsp_descriptor_id
 	, 0 // uint32_t gui_descriptor_id
-	, "Instrument Tuner" // const char *plugin_human_id
+	, "x42 Instrument Tuner" // const char *plugin_human_id
 	, (const struct LV2Port[20])
 	{
 		{ "control", ATOM_IN, nan, nan, nan, "GUI to plugin communication"},
