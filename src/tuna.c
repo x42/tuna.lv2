@@ -193,9 +193,11 @@ typedef struct {
 	uint32_t filter_init;
 	bool initialize;
 
+	/* rate limit */
+	int   note_last;
+	float cent_last;
 #ifdef __ARMEL__
 	float freq_last;
-	float cent_last;
 #endif
 
 	/* discriminator */
@@ -366,9 +368,10 @@ instantiate(
 	self->rms_signal = 0;
 	self->rms_postfilter = 0;
 	self->rms_last = -100;
+	self->note_last = -1;
+	self->cent_last = 0;
 #ifdef __ARMEL__
 	self->freq_last = 0;
-	self->cent_last = 0;
 #endif
 	self->initialize = true;
 	self->spectr_active = false;
@@ -911,8 +914,21 @@ run(LV2_Handle handle, uint32_t n_samples)
 		 */
 		const float cent = 1200.0 * log2(freq_avg / note_freq);
 
-		// TODO rate-limit cent difference
-		mts (self, note, cent);
+		bool cent_diff = false;
+		bool note_diff = false;
+
+		if (fabsf (self->cent_last - cent) > .05) {
+			cent_diff = true;
+			self->cent_last = cent;
+		}
+		if (self->note_last != note) {
+			note_diff = true;
+			self->note_last = note;
+		}
+
+		if (note_diff || cent_diff) {
+			mts (self, note, cent);
+		}
 
 		/* assign output port data */
 #ifdef __ARMEL__
@@ -922,9 +938,8 @@ run(LV2_Handle handle, uint32_t n_samples)
 		} else {
 			*self->p_freq_out = self->freq_last;
 		}
-		if (fabsf (self->cent_last - cent) > .02) {
+		if (cent_diff) {
 			*self->p_cent     = cent;
-			self->cent_last   = cent;
 		} else {
 			*self->p_cent     = self->cent_last;
 		}
