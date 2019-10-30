@@ -762,6 +762,9 @@ static bool cb_set_mode (RobWidget* handle, void *data) {
 			mode = -1
 				- rintf(robtk_spin_get_value(ui->spb_octave)+1) * 12.
 				- robtk_select_get_value(ui->sel_note);
+			if (mode < -128) {
+				mode = -128;
+			}
 			break;
 	}
 	if (!ui->disable_signals) {
@@ -864,7 +867,7 @@ static RobWidget * toplevel(TunaUI* ui, void * const top)
 	robtk_sep_set_linewidth(ui->sep[2], 1);
 
 	ui->spb_tuning = robtk_spin_new(220, 880, .5);
-	ui->spb_octave = robtk_spin_new(-1, 10, 1);
+	ui->spb_octave = robtk_spin_new(-1, 9, 1);
 	ui->spb_freq   = robtk_spin_new(20, 1000, .5); // TODO log-map
 	ui->sel_mode   = robtk_select_new();
 	ui->sel_note   = robtk_select_new();

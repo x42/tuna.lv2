@@ -54,7 +54,7 @@
     lv2:symbol "mode" ;
     lv2:name "Mode" ;
     lv2:default 0 ;
-    lv2:minimum 0 ;
+    lv2:minimum -128 ;
     lv2:maximum 8000 ;
     lv2:portProperty lv2:integer;
     lv2:scalePoint [ rdfs:label "auto"; rdf:value 0 ; ] ;

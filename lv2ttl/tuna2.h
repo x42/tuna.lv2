@@ -16,7 +16,7 @@ static const RtkLv2Description _plugin_tuna_two = {
 		{ "sysex", MIDI_OUT, nan, nan, nan, "MTS/SysEx output and Plugin to GUI communication"},
 		{ "in", AUDIO_IN, nan, nan, nan, "Audio Input"},
 		{ "out", AUDIO_OUT, nan, nan, nan, "Audio output"},
-		{ "mode", CONTROL_IN, 0.000000, 0.000000, 8000.000000, "Mode"},
+		{ "mode", CONTROL_IN, 0.000000, -128.000000, 8000.000000, "Mode"},
 		{ "tuning", CONTROL_IN, 440.000000, 220.000000, 880.000000, "Tuning A440"},
 		{ "rms", CONTROL_OUT, nan, -100.000000, -0.000000, "Signal Level (RMS)"},
 		{ "freq_out", CONTROL_OUT, nan, 0.000000, 10000.000000, "Detected Frequency"},
