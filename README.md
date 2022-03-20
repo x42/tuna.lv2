@@ -10,7 +10,7 @@ Compiling this plugin requires the LV2 SDK, gnu-make, a c-compiler,
 libpango, libcairo and openGL (sometimes called: glu, glx, mesa).
 
 ```bash
-  git clone git://github.com/x42/tuna.lv2.git
+  git clone https://github.com/x42/tuna.lv2.git
   cd tuna.lv2
   make submodules
   make
