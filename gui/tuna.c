@@ -20,7 +20,12 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "lv2/lv2plug.in/ns/extensions/ui/ui.h"
+#ifdef HAVE_LV2_1_18_6
+#include <lv2/ui/ui.h>
+#else
+#include <lv2/lv2plug.in/ns/extensions/ui/ui.h>
+#endif
+
 #include "src/tuna.h"
 
 #define RTK_URI TUNA_URI
