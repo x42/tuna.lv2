@@ -1110,7 +1110,7 @@ instantiate(
 static enum LVGLResize
 plugin_scale_mode(LV2UI_Handle handle)
 {
-	return LVGL_LAYOUT_TO_FIT;
+	return LVGL_ZOOM_TO_ASPECT;
 }
 
 static void
