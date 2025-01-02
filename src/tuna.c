@@ -54,7 +54,7 @@
 #define FFT_FREQ_THESHOLD_MIN (5.f)
 
 /* for testing only -- output filtered signal */
-#define OUTPUT_POSTFILTER
+//#define OUTPUT_POSTFILTER
 
 /* use both rising and falling signal edge to track phase */
 #define TWO_EDGES
@@ -837,7 +837,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 #ifdef OUTPUT_POSTFILTER
 		a_out[n] = signal;
 #endif
-a_out[n] = 0;
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
 		if (rms_postfilter < rms_signal * v_flt) {
