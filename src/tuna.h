@@ -62,6 +62,8 @@ typedef enum {
 	TUNA_T_FUN,
 	TUNA_T_OCT,
 	TUNA_T_OVT,
+	TUNA_PORT,
+	TUNA_WEB_SERVER,
 } PortIndexTuna;
 
 

@@ -10,7 +10,7 @@ static const RtkLv2Description _plugin_tuna_one = {
 	, 0 // uint32_t dsp_descriptor_id
 	, 0 // uint32_t gui_descriptor_id
 	, "x42 Instrument Tuner" // const char *plugin_human_id
-	, (const struct LV2Port[20])
+	, (const struct LV2Port[22])
 	{
 		{ "control", ATOM_IN, nan, nan, nan, "GUI to plugin communication"},
 		{ "sysex", MIDI_OUT, nan, nan, nan, "MTS/SysEx output and Plugin to GUI communication"},
@@ -32,6 +32,8 @@ static const RtkLv2Description _plugin_tuna_one = {
 		{ "thresholdFundamental", CONTROL_IN, 5.000000, 0.000000, 60.000000, "thresholdFundamental"},
 		{ "thresholdOctave", CONTROL_IN, -30.000000, -100.000000, 0.000000, "thresholdOctave"},
 		{ "thresholdOvertones", CONTROL_IN, -15.000000, -100.000000, 0.000000, "thresholdvertones"},
+		{ "port", CONTROL_IN, 8080.000000, 1024.000000, 65535.000000, "Port"},
+		{ "web_server", CONTROL_IN, 0.000000, 0.000000, 1.000000, "Web Server"},
 	}
 	, 20 // uint32_t nports_total
 	, 1 // uint32_t nports_audio_in
