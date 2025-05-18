@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tuna.lv2</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #f5f5f5;
+      }
+      .tuner-container {
+        text-align: center;
+        width: 80%;
+        max-width: 500px;
+        padding: 20px;
+        background-color: white;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+      }
+      h1 {
+        font-size: 8em;
+        margin: 0;
+        transition: color 0.2s ease;
+      }
+      .slider-container {
+        margin: 0;
+      }
+      #muteButton {
+        padding: 15px 30px;
+        font-size: 2em;
+        font-weight: bold;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+        transition:
+          background-color 0.3s ease,
+          transform 0.2s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      input[type="range"] {
+        width: 100%;
+        padding: 3px 0;
+        margin: 0;
+        background-color: #cccccc;
+        -webkit-appearance: none;
+        appearance: none;
+        height: 20px;
+      }
+
+      input[type="range"]::-webkit-slider-thumb,
+      input[type="range"]::-moz-range-thumb,
+      input[type="range"]::-ms-thumb {
+        width: 30px;
+        height: 15px;
+        background: #666;
+        border-radius: 5px;
+        border: 2px solid #333;
+        cursor: pointer;
+      }
+
+      .cents {
+        margin: 15px 0;
+        font-size: 1.5em;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #101010;
+        }
+        .tuner-container {
+          background-color: #1c1c1c;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tuner-container">
+      <h1 id="note">A4</h1>
+      <div class="slider-container">
+        <input type="range" id="tuner-slider" min="-50" max="50" value="0" step="1" disabled />
+      </div>
+      <div class="cents"><span id="cents-value">0</span> cents</div>
+      <button id="muteButton" onclick="toggleMute()" style="background-color: green; color: white">Mute</button>
+    </div>
+
+    <script>
+      const noteElement = document.getElementById("note");
+      const slider = document.getElementById("tuner-slider");
+      const centsElement = document.getElementById("cents-value");
+
+      function setNote(midiValue) {
+      	const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const octave = Math.floor((midiValue - 12) / 12);
+        const note = noteNames[midiValue % 12];
+        noteElement.textContent = note + octave;
+      }
+
+      function pollData() {
+        fetch("/n")
+          .then(response => response.json())
+          .then(data => {
+            if (data !== undefined)
+              setNote(parseInt(data));
+            })
+            .catch(err => console.error("Error fetching /n:", err));
+
+        fetch("/c")
+          .then(response => response.json())
+          .then(data => {
+            if (data !== undefined)
+              setCents(parseInt(data));
+            })
+            .catch(err => console.error("Error fetching /c:", err));
+      }
+
+      function setCentsValue(value) {
+        slider.value = value;
+        centsElement.textContent = value;
+      }
+
+      function setCents(value) {
+        if (value > 5)
+          noteElement.style.color = "red";
+        else if (value < -5)
+          noteElement.style.color = "blue";
+        else
+          noteElement.style.color = "green";
+
+      	let add = (value > slider.value) ? 1 : -1;
+      	let startValue = parseInt(slider.value);
+      	for (let i = startValue; i != value + add; i += add)
+          setTimeout("setCentsValue(" + i + ")", Math.abs(i - startValue) * 4);
+      }
+
+      function toggleMute() {
+        const button = document.getElementById("muteButton");
+        const isMuted = (button.innerText === "Mute");
+
+        fetch("/m");
+
+        if (isMuted) {
+          button.innerText = "Unmute";
+          button.style.backgroundColor = "red";
+        } else {
+          button.innerText = "Mute";
+          button.style.backgroundColor = "green";
+        }
+      }
+
+      setCents(0);
+      setInterval(pollData, 250);
+    </script>
+  </body>
+</html>

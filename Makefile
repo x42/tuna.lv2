@@ -49,7 +49,7 @@ LV2GUI=tunaUI_gl
 BUNDLE=tuna.lv2
 targets=
 
-LOADLIBES=-lm
+LOADLIBES=-lm -lmicrohttpd
 LV2UIREQ=
 GLUICFLAGS=-I.
 
@@ -84,7 +84,7 @@ else
   EXE_EXT=
   UI_TYPE=ui:X11UI
   PUGL_SRC=$(RW)pugl/pugl_x11.c
-  PKG_GL_LIBS=glu gl
+  PKG_GL_LIBS=glu gl 
   GLUILIBS=-lX11
   GLUICFLAGS+=`$(PKG_CONFIG) --cflags glu`
   STRIPFLAGS= -s
@@ -126,6 +126,8 @@ endif
 ifneq ($(MOD),)
   targets+=$(BUILDDIR)modgui
 endif
+
+targets+=$(BUILDDIR)index.html
 
 ###############################################################################
 # extract versions
@@ -334,6 +336,8 @@ $(BUILDDIR)modgui: modgui/
 	@mkdir -p $(BUILDDIR)/modgui
 	cp -r modgui/* $(BUILDDIR)modgui/
 
+$(BUILDDIR)index.html:
+	cp -r index.html $(BUILDDIR)
 ###############################################################################
 # install/uninstall/clean target definitions
 
@@ -344,6 +348,7 @@ uninstall: uninstall-bin uninstall-man
 install-bin: all
 	install -d $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -m644 $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(DESTDIR)$(LV2DIR)/$(BUNDLE)
+	install -m644 $(BUILDDIR)index.html $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 	install -m755 $(BUILDDIR)$(LV2NAME)$(LIB_EXT) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 ifneq ($(BUILDOPENGL), no)
 	install -m755 $(BUILDDIR)$(LV2GUI)$(LIB_EXT) $(DESTDIR)$(LV2DIR)/$(BUNDLE)
@@ -359,6 +364,7 @@ endif
 
 uninstall-bin:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/manifest.ttl
+	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/index.html
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME).ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GUI)$(LIB_EXT)
@@ -384,7 +390,8 @@ man: $(APPBLD)x42-tuna-collection
 clean:
 	rm -f $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl \
 	  $(BUILDDIR)$(LV2NAME)$(LIB_EXT) \
-	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT)
+	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT) \
+	  $(BUILDDIR)index.html
 	rm -rf $(BUILDDIR)*.dSYM
 	rm -rf $(APPBLD)x42-*
 	rm -rf $(BUILDDIR)modgui

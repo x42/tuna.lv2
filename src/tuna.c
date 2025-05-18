@@ -79,6 +79,7 @@ void debug_printf (const char *fmt,...) {}
 #include "tuna.h"
 #include "spectr.c"
 #include "fft.c"
+#include "web.c"
 
 #ifdef __ARMEL__
 // TODO also use for "#one" - to spread out load
@@ -186,6 +187,10 @@ typedef struct {
 	float* p_t_fun;
 	float* p_t_oct;
 	float* p_t_ovt;
+	
+	float* port;
+	float* web_server_on;
+	WebServer* web_server;
 
 	LV2_Atom_Sequence* notify;
 	const LV2_Atom_Sequence* control;
@@ -331,7 +336,6 @@ static void feed_fft (Tuna* self, const float* data, size_t n_samples) {
 }
 #endif
 
-
 static LV2_Handle
 instantiate(
 		const LV2_Descriptor*     descriptor,
@@ -365,6 +369,7 @@ instantiate(
 		return NULL;
 	}
 
+	self->port = 0;
 	self->rate = rate;
 
 	self->tuna_fc = 0;
@@ -439,6 +444,10 @@ instantiate(
 #ifdef DISPLAY_INTERFACE
 	self->aspvf = rate / 25;
 #endif
+
+	self->web_server = (WebServer*)malloc(sizeof(WebServer));
+	web_server_init(self->web_server, bundle_path, &self->note_last, &self->cent_last);
+
 	return (LV2_Handle)self;
 }
 
@@ -510,6 +519,12 @@ connect_port_tuna(
 			break;
 		case TUNA_T_OVT:
 			self->p_t_ovt = (float*)data;
+			break;
+		case TUNA_PORT:
+			self->port = (float*)data;
+			break;
+		case TUNA_WEB_SERVER:
+			self->web_server_on = (float*)data;
 			break;
 	}
 }
@@ -714,9 +729,13 @@ run(LV2_Handle handle, uint32_t n_samples)
 	fft_ran_this_cycle = rb_read_space (self->result) > 0;
 #endif
 
+		if ((*self->web_server_on != 0.0f) != self->web_server->server_running) {
+			if (self->web_server->server_running) stop_web_server(self->web_server); 
+			else start_web_server(self->web_server, (int)*self->port);
+		}
+
 	/* process every sample */
 	for (uint32_t n = 0; n < n_samples; ++n) {
-
 		/* 1) calculate RMS */
 		rms_signal += rms_omega * ((a_in[n] * a_in[n]) - rms_signal) + 1e-20;
 
@@ -818,7 +837,6 @@ run(LV2_Handle handle, uint32_t n_samples)
 #ifdef OUTPUT_POSTFILTER
 		a_out[n] = signal;
 #endif
-
 		/* 4) reject signals outside in the band */
 		rms_postfilter += rms_omega * ( (signal * signal) - rms_postfilter) + 1e-20;
 		if (rms_postfilter < rms_signal * v_flt) {
@@ -834,7 +852,7 @@ run(LV2_Handle handle, uint32_t n_samples)
 		 * rising-edge zero-transitions
 		 * and a 2nd order phase-locked loop
 		 */
-		if (   (signal >= 0 && prev_smpl < 0)
+		if ((signal >= 0 && prev_smpl < 0)
 #ifdef TWO_EDGES
 				|| (signal <= 0 && prev_smpl > 0)
 #endif
@@ -985,7 +1003,9 @@ run(LV2_Handle handle, uint32_t n_samples)
 	*self->p_strobe = self->monotonic_cnt / self->rate; // kick UI
 
 	/* forward audio */
-	if (self->a_in != self->a_out) {
+	if (self->web_server->muted) {
+		memset(self->a_out, 0, n_samples * sizeof(float));	
+	} else if (self->a_in != self->a_out) {
 		memcpy(self->a_out, self->a_in, sizeof(float) * n_samples);
 	}
 
@@ -1012,6 +1032,9 @@ static void
 cleanup(LV2_Handle handle)
 {
 	Tuna* self = (Tuna*)handle;
+
+	if (self->web_server->server_running) stop_web_server(self->web_server);
+	free(self->web_server);
 
 #ifdef DISPLAY_INTERFACE
 	if (self->display) {
