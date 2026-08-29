@@ -231,7 +231,9 @@ fftx_init (struct FFTAnalysis* ft, uint32_t window_size, double rate, double fps
 	fftx_reset (ft);
 
 	pthread_mutex_lock (&fftw_planner_lock);
+	fftwf_set_timelimit(2.0);  // spend no more than 2 seconds generating fft plan.
 	ft->fftplan = fftwf_plan_r2r_1d (window_size, ft->fft_in, ft->fft_out, FFTW_R2HC, FFTW_MEASURE);
+	fftwf_set_timelimit(FFTW_NO_TIMELIMIT); // restore to default.
 	++instance_count;
 	pthread_mutex_unlock (&fftw_planner_lock);
 }
